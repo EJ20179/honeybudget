@@ -441,7 +441,16 @@ tr:hover td { background: var(--cream); }
   .backdrop { display: none; position: fixed; inset: 0; background: rgba(90,74,61,0.35); z-index: 150; }
   .backdrop.show { display: block; }
   .bar-row { grid-template-columns: 80px 1fr 78px; }
+  /* 상단바: 제목 위 / 월 선택 아래 전체폭 (가로 넘침 방지) */
+  .topbar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .topbar-right { width: 100%; }
+  .month-filter { width: 100%; justify-content: space-between; }
+  .month-filter input { flex: 1; min-width: 0; }
+  /* 카드 제목 안 토글/버튼이 길어도 줄바꿈되게 */
+  .card-title { flex-wrap: wrap; }
 }
+/* 어떤 화면에서도 가로 스크롤(잘림) 방지 */
+html, body { max-width: 100%; overflow-x: hidden; }
 @media (min-width: 861px) { .mobile-header, .backdrop { display: none !important; } }
 @media (max-width: 520px) {
   .grid-4, .grid-3 { grid-template-columns: 1fr; }
