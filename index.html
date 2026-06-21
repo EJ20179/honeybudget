@@ -841,8 +841,8 @@ function seedSampleData() {
     { id:uid(), date:d(3),  kind:'공동지출',     category:'식비',    payment:'생활비통장', amount:420000, memo:'장보기·외식' },
     { id:uid(), date:d(5),  kind:'공동지출',     category:'통신',    payment:'생활비통장', amount:88000,  memo:'휴대폰+인터넷' },
     { id:uid(), date:d(7),  kind:'공동지출',     category:'보험',    payment:'계좌이체',   amount:180000, memo:'부부 실손보험' },
-    { id:uid(), date:d(12), kind:'아내 개별지출', category:'쇼핑',    payment:'카드',       amount:65000,  memo:'화장품' },
-    { id:uid(), date:d(14), kind:'남편 개별지출', category:'교통',    payment:'카드',       amount:55000,  memo:'주유' },
+    { id:uid(), date:d(12), kind:'아내 개별지출', category:'쇼핑',    payment:'신용카드',   amount:65000,  paid:false, memo:'화장품' },
+    { id:uid(), date:d(14), kind:'남편 개별지출', category:'교통',    payment:'신용카드',   amount:55000,  paid:false, memo:'주유' },
     { id:uid(), date:d(16), kind:'공동지출',     category:'데이트',  payment:'생활비통장', amount:48000,  memo:'주말 영화·카페' },
     { id:uid(), date:d(18), kind:'공동지출',     category:'카드값',  payment:'계좌이체',   amount:300000, memo:'전월 카드대금 일부' },
   ];
@@ -1202,12 +1202,14 @@ function sumIncome(ym) {
 function cumulativeBalance(ym) {
   let inc = 0, exp = 0;
   db.incomes.forEach(i => { if ((i.date||'').slice(0,7) <= ym) inc += num(i.amount); });
-  db.expenses.forEach(e => { if ((e.date||'').slice(0,7) <= ym) exp += num(e.amount); });
+  db.expenses.forEach(e => { if ((e.date||'').slice(0,7) <= ym && counted(e)) exp += num(e.amount); });
   return inc - exp;
 }
-// 선택월 지출 합계 (구분별 필터 가능)
+// 실제 지출(현금흐름)로 잡히는지 — 미결제 신용카드는 '결제 예정'이라 제외
+function counted(e) { return e.payment !== '신용카드' || e.paid === true; }
+// 선택월 지출 합계 (구분별 필터 가능 · 결제완료분만)
 function sumExpense(ym, kind) {
-  return db.expenses.filter(e => inMonth(e.date, ym) && (!kind || e.kind===kind))
+  return db.expenses.filter(e => inMonth(e.date, ym) && counted(e) && (!kind || e.kind===kind))
                     .reduce((s,e)=>s+num(e.amount),0);
 }
 // 선택월 저축 합계
@@ -1217,10 +1219,19 @@ function sumSaving(ym) {
 // 선택월 카테고리별 지출
 function sumByCategory(ym) {
   const map = {};
-  db.expenses.filter(e => inMonth(e.date, ym)).forEach(e => {
+  db.expenses.filter(e => inMonth(e.date, ym) && counted(e)).forEach(e => {
     map[e.category] = (map[e.category]||0) + num(e.amount);
   });
   return map;
+}
+// 신용카드 결제 예정(미결제) — 누구(공동/은정/성현)별 합계
+function pendingCardByPerson() {
+  const r = { 공동:0, 은정:0, 성현:0, total:0 };
+  db.expenses.filter(e => e.payment==='신용카드' && e.paid!==true).forEach(e => {
+    const who = e.kind==='아내 개별지출' ? '은정' : (e.kind==='남편 개별지출' ? '성현' : '공동');
+    r[who] += num(e.amount); r.total += num(e.amount);
+  });
+  return r;
 }
 // 선택월 결제수단별 지출
 function sumByPayment(ym, method) {
@@ -1230,7 +1241,7 @@ function sumByPayment(ym, method) {
 // 결제수단별 지출 합계 맵 (옛 '카드' 데이터는 신용카드로 합산)
 function paymentBreakdown(ym) {
   const map = {};
-  db.expenses.filter(e => inMonth(e.date, ym)).forEach(e => {
+  db.expenses.filter(e => inMonth(e.date, ym) && counted(e)).forEach(e => {
     let p = e.payment || '기타';
     if (p === '카드') p = '신용카드';   // 예전 데이터 호환
     map[p] = (map[p]||0) + num(e.amount);
@@ -1799,10 +1810,14 @@ function renderExpense() {
   const ym = curMonth;
   const list = db.expenses.filter(e => inMonth(e.date, ym))
                           .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const total = list.reduce((s,e)=>s+num(e.amount),0);
-  const common = list.filter(e=>e.kind==='공동지출').reduce((s,e)=>s+num(e.amount),0);
-  const wife = list.filter(e=>e.kind==='아내 개별지출').reduce((s,e)=>s+num(e.amount),0);
-  const hus = list.filter(e=>e.kind==='남편 개별지출').reduce((s,e)=>s+num(e.amount),0);
+  const total = list.filter(counted).reduce((s,e)=>s+num(e.amount),0);   // 결제완료(실지출)만
+  const common = list.filter(e=>e.kind==='공동지출'&&counted(e)).reduce((s,e)=>s+num(e.amount),0);
+  const wife = list.filter(e=>e.kind==='아내 개별지출'&&counted(e)).reduce((s,e)=>s+num(e.amount),0);
+  const hus = list.filter(e=>e.kind==='남편 개별지출'&&counted(e)).reduce((s,e)=>s+num(e.amount),0);
+  // 신용카드 결제 예정 (미결제 · 전체 기간)
+  const pend = pendingCardByPerson();
+  const pendList = db.expenses.filter(e=>e.payment==='신용카드' && e.paid!==true)
+                              .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
 
   document.getElementById('page-expense').innerHTML = `
     <div class="card">
@@ -1852,16 +1867,43 @@ function renderExpense() {
     </div>
 
     <div class="card">
-      <div class="card-title">🧾 ${ym} 지출 내역 <span class="badge">${list.length}건</span></div>
+      <div class="card-title">💳 신용카드 결제 예정 <span class="badge">${won(pend.total)}</span>
+        ${pend.total>0?`<button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="settleAllCards('')">전체 결제완료</button>`:''}</div>
+      <div class="pill-summary">
+        <div class="pill coral">공동 <b>${won(pend.공동)}</b></div>
+        <div class="pill eun-pill" style="background:var(--coral-soft);color:var(--coral-deep)">은정 <b>${won(pend.은정)}</b></div>
+        <div class="pill" style="background:#dde6f0;color:#5e7596">성현 <b>${won(pend.성현)}</b></div>
+      </div>
+      ${pendList.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>사용일</th><th>구분</th><th>카테고리</th><th style="text-align:right">금액</th><th>메모</th><th></th></tr></thead>
+        <tbody>${pendList.map(e=>`
+          <tr>
+            <td>${e.date}</td>
+            <td><span class="tag ${kindTag(e.kind)}">${e.kind.replace(' 개별지출','').replace('지출','')}</span></td>
+            <td>${e.category}</td>
+            <td style="text-align:right" class="num out">${won(e.amount)}</td>
+            <td>${esc(e.memo)||'-'}</td>
+            <td><div class="row-actions">
+              <button class="btn btn-soft btn-sm" onclick="settleCard('${e.id}')" title="결제일에 지출로 확정">✓ 결제완료</button>
+              <button class="icon-btn" onclick="editExpense('${e.id}')" title="수정">✏️</button>
+              <button class="icon-btn del" onclick="delItem('expenses','${e.id}')" title="삭제">🗑️</button>
+            </div></td>
+          </tr>`).join('')}
+        </tbody></table></div>`
+      : emptyBox('결제 예정인 신용카드 내역이 없어요','지출을 신용카드로 입력하면 여기 모여요. 결제일에 ✓ 결제완료를 누르면 그날 지출로 잡혀요')}
+    </div>
+
+    <div class="card">
+      <div class="card-title">🧾 ${ym} 지출 내역(결제완료) <span class="badge">${won(total)}</span></div>
       <div class="pill-summary">
         <div class="pill coral">합계 <b>${won(total)}</b></div>
         <div class="pill mint">공동 <b>${won(common)}</b></div>
         <div class="pill">아내 개별 <b>${won(wife)}</b></div>
         <div class="pill">남편 개별 <b>${won(hus)}</b></div>
       </div>
-      ${list.length ? `<div class="table-wrap"><table>
+      ${list.filter(counted).length ? `<div class="table-wrap"><table>
         <thead><tr><th>날짜</th><th>구분</th><th>카테고리</th><th>결제</th><th style="text-align:right">금액</th><th>메모</th><th></th></tr></thead>
-        <tbody>${list.map(e=>`
+        <tbody>${list.filter(counted).map(e=>`
           <tr>
             <td>${e.date}</td>
             <td><span class="tag ${kindTag(e.kind)}">${e.kind.replace(' 개별지출','').replace('지출','')}</span></td>
@@ -1875,23 +1917,42 @@ function renderExpense() {
             </div></td>
           </tr>`).join('')}
         </tbody></table></div>`
-      : emptyBox('이 달엔 아직 지출 내역이 없어요','위 폼에서 첫 지출을 기록해 보세요. 예) 공동지출 · 식비 · 카드 · 35,000원')}
+      : emptyBox('이 달엔 결제완료된 지출이 없어요','위 폼에서 지출을 기록해 보세요 (신용카드는 결제 예정 칸에 모여요)')}
     </div>`;
 }
 function addExpense() {
   const amount = num(document.getElementById('exp-amount').value);
   if (amount <= 0) return toast('금액을 입력해 주세요 🙏');
+  const payment = document.getElementById('exp-pay').value;
   db.expenses.push({
     id:uid(),
     date: document.getElementById('exp-date').value || today(),
     kind: document.getElementById('exp-kind').value,
     category: document.getElementById('exp-cat').value,
-    payment: document.getElementById('exp-pay').value,
+    payment,
+    paid: payment==='신용카드' ? false : true,   // 신용카드는 '결제 예정'으로 시작
     amount, memo: document.getElementById('exp-memo').value.trim()
   });
-  save(); toast('지출을 저장했어요 ✨'); renderExpense();
+  save(); toast(payment==='신용카드' ? '신용카드 결제 예정에 추가했어요 💳' : '지출을 저장했어요 ✨'); renderExpense();
 }
 function editExpense(id) { openEditModal('expenses', id); }
+// 신용카드 1건 결제 완료 → 결제일(오늘) 지출로 확정
+function settleCard(id) {
+  const e = db.expenses.find(x=>x.id===id); if(!e) return;
+  if (e.date && e.date !== today()) e.memo = (e.memo ? e.memo+' ' : '') + '(원사용 '+e.date+')';
+  e.paid = true; e.date = today();   // 결제일에 실제 지출로 잡힘
+  save(); toast('결제 완료로 처리했어요 ✓ (오늘 지출로 반영)'); renderExpense();
+}
+// 신용카드 결제 예정 전체(또는 사람별) 결제 완료
+function settleAllCards(who) {
+  const targets = db.expenses.filter(e => e.payment==='신용카드' && e.paid!==true &&
+    (!who || (e.kind==='아내 개별지출'?'은정':(e.kind==='남편 개별지출'?'성현':'공동'))===who));
+  if (!targets.length) return toast('결제할 예정 건이 없어요');
+  confirmModal('💳', (who||'전체')+' 신용카드 결제 완료할까요?', targets.length+'건이 오늘(결제일) 지출로 반영돼요.', ()=>{
+    targets.forEach(e => { if(e.date!==today()) e.memo=(e.memo?e.memo+' ':'')+'(원사용 '+e.date+')'; e.paid=true; e.date=today(); });
+    save(); toast(targets.length+'건 결제 완료 처리했어요 ✓'); renderExpense();
+  });
+}
 
 /* ---------- 고정 지출 (매월 반복 항목) ---------- */
 // 해당 월에 그 고정항목이 실제 지출로 기록됐는지
@@ -3665,7 +3726,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r27';
+const APP_VERSION = '2026.06.21-r28';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
