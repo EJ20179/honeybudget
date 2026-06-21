@@ -699,16 +699,18 @@ const INVEST_TYPES = ['국내주식','해외주식','ETF','펀드','채권','발
 const INVEST_HOLDERS = ['은정','성현','공동'];   // 투자 계좌 명의
 const SCHEDULE_REPEAT = ['한 번','매월 반복'];   // 반복 여부
 // 일정 분류 (재정 / 개인 / 가족) 와 분류별 카테고리
-const SCHEDULE_GROUPS = ['재정','개인','가족'];
+const SCHEDULE_GROUPS = ['재정','개인','근무','가족'];
 const GROUP_CATS = {
   '재정': ['급여일','카드값','대출상환','적금·저축','공과금','보험료','기타'],
   '개인': ['약속','병원','운동','자기계발','미용','할 일','기타'],
+  '근무': ['연차','반차','대체휴무','당직','출장','회식','출근','기타'],
   '가족': ['가족모임','생일','기념일','경조사','여행','외식','육아','기타'],
 };
 // 카테고리별 이모지
 const SCHED_ICON = {
   '급여일':'💰','카드값':'💳','대출상환':'🏦','적금·저축':'🐷','공과금':'🧾','보험료':'🛡️',
   '약속':'🤝','병원':'🏥','운동':'💪','자기계발':'📚','미용':'💇','할 일':'✅',
+  '연차':'🏖️','반차':'🌤️','대체휴무':'😌','당직':'🌙','출장':'🧳','회식':'🍻','출근':'🏢',
   '가족모임':'👨‍👩‍👧','생일':'🎂','기념일':'💕','경조사':'💐','여행':'✈️','외식':'🍽️','육아':'🍼',
   '기타':'📌'
 };
@@ -716,6 +718,7 @@ const SCHED_ICON = {
 const GROUP_COLOR = {
   '재정': { bg:'var(--coral-soft)', fg:'var(--coral-deep)' },
   '개인': { bg:'#e6edf8',           fg:'#3f6fc4' },
+  '근무': { bg:'#efe6f7',           fg:'#7a5ba8' },
   '가족': { bg:'var(--mint-soft)',  fg:'#5a8a6e' },
 };
 // 분류 태그 HTML
@@ -890,6 +893,9 @@ function seedSampleData() {
     // 개인
     { id:uid(), date:d(28), title:'정기검진', group:'개인', person:'은정', category:'병원', repeat:'한 번', startTime:'09:30', endTime:'10:30', memo:'공복 유지' },
     { id:uid(), date:d(8),  title:'헬스장 PT', group:'개인', person:'성현', category:'운동', repeat:'매월 반복', monthDay:'8', startTime:'19:00', memo:'주 2회' },
+    // 근무
+    { id:uid(), date:d(23), title:'연차', group:'근무', person:'은정', category:'연차', repeat:'한 번', memo:'개인 휴가' },
+    { id:uid(), date:d(27), title:'당직', group:'근무', person:'성현', category:'당직', repeat:'한 번', startTime:'18:00', endTime:'09:00', memo:'야간 당직' },
     // 가족
     { id:uid(), date:fmtDate(addMonths(now,2)), title:'결혼기념일 💕', group:'가족', category:'기념일', repeat:'한 번', memo:'1주년 여행 준비' },
     { id:uid(), date:fmtDate(addMonths(now,1)), endDate:fmtDate(addMonths(now,1)), title:'어머님 생신', group:'가족', category:'생일', repeat:'한 번', memo:'선물·외식 예약' },
@@ -2933,7 +2939,7 @@ function renderSchedule() {
           return `<div class="sched-item">
             <div class="sched-ic">${SCHED_ICON[ev.category]||'📌'}</div>
             <div class="sched-body">
-              <div class="sched-title">${esc(ev.title)} ${groupTag(evGroup(ev))}${evGroup(ev)==='개인'&&ev.person?` <span class="tag ${personTag(ev.person)}">${ev.person}</span>`:''} ${ev.repeat==='매월 반복'?`<span class="rep">${repText(ev)}</span>`:''}</div>
+              <div class="sched-title">${esc(ev.title)} ${groupTag(evGroup(ev))}${(evGroup(ev)==='개인'||evGroup(ev)==='근무')&&ev.person?` <span class="tag ${personTag(ev.person)}">${ev.person}</span>`:''} ${ev.repeat==='매월 반복'?`<span class="rep">${repText(ev)}</span>`:''}</div>
               <div class="sched-sub">${schedRangeText(ev, when)} · ${schedTimeText(ev)} · ${ev.category}${ev.memo?' · '+esc(ev.memo):''}</div>
             </div>
             <div class="sched-dday ${d.cls}">${d.txt}</div>
@@ -2952,7 +2958,7 @@ function renderSchedule() {
         <div class="field"><label>시작 시간 <span style="color:var(--text-soft)">(선택)</span></label><input type="time" id="sc-start"></div>
         <div class="field"><label>종료 시간 <span style="color:var(--text-soft)">(선택)</span></label><input type="time" id="sc-end"></div>
         <div class="field"><label>분류</label><select id="sc-group" onchange="onSchedGroupChange()">${SCHEDULE_GROUPS.map(g=>`<option ${g===schedFormGroup?'selected':''}>${g}</option>`).join('')}</select></div>
-        <div class="field" id="sc-person-field" style="display:${schedFormGroup==='개인'?'':'none'}"><label>누구 일정</label><select id="sc-person">${PEOPLE.map(p=>`<option ${p===currentUser()?'selected':''}>${p}</option>`).join('')}</select></div>
+        <div class="field" id="sc-person-field" style="display:${(schedFormGroup==='개인'||schedFormGroup==='근무')?'':'none'}"><label>누구 일정</label><select id="sc-person">${PEOPLE.map(p=>`<option ${p===currentUser()?'selected':''}>${p}</option>`).join('')}</select></div>
         <div class="field"><label>종류</label><select id="sc-cat" onchange="onSchedCatChange()">${schedCatOptions(schedFormGroup)}</select></div>
         <div class="field"><label>반복</label><select id="sc-repeat" onchange="onRepeatChange()">${SCHEDULE_REPEAT.map(r=>`<option>${r}</option>`).join('')}</select></div>
         <div class="field" id="sc-monthday-field" style="display:none"><label>매월 며칠</label>
@@ -2975,7 +2981,7 @@ function renderSchedule() {
         thisMonth.map(({ev,when})=>`<div class="sched-item">
           <div class="sched-day ${dayClass(when)}">${when.getDate()}<span>${WEEKDAYS[when.getDay()]}</span></div>
           <div class="sched-body">
-            <div class="sched-title">${SCHED_ICON[ev.category]||'📌'} ${esc(ev.title)} ${groupTag(evGroup(ev))}${evGroup(ev)==='개인'&&ev.person?` <span class="tag ${personTag(ev.person)}">${ev.person}</span>`:''} ${ev.repeat==='매월 반복'?`<span class="rep">${repText(ev)}</span>`:''}</div>
+            <div class="sched-title">${SCHED_ICON[ev.category]||'📌'} ${esc(ev.title)} ${groupTag(evGroup(ev))}${(evGroup(ev)==='개인'||evGroup(ev)==='근무')&&ev.person?` <span class="tag ${personTag(ev.person)}">${ev.person}</span>`:''} ${ev.repeat==='매월 반복'?`<span class="rep">${repText(ev)}</span>`:''}</div>
             <div class="sched-sub">${schedTimeText(ev)}${ev.endDate&&ev.endDate!==ev.date?` · ~${fmtMD(parseYMD(ev.endDate))}까지`:''} · ${ev.category}${ev.memo?' · '+esc(ev.memo):''}</div>
           </div>
           <div class="row-actions">
@@ -2991,7 +2997,7 @@ function onSchedGroupChange() {
   schedFormGroup = document.getElementById('sc-group').value;
   document.getElementById('sc-cat').innerHTML = schedCatOptions(schedFormGroup);
   const pf = document.getElementById('sc-person-field');
-  if (pf) pf.style.display = schedFormGroup==='개인' ? '' : 'none';   // 개인 일정일 때만 인물 선택
+  if (pf) pf.style.display = (schedFormGroup==='개인'||schedFormGroup==='근무') ? '' : 'none';   // 개인·근무 일정일 때 인물 선택
 }
 // 반복 선택 변경 → '매월 며칠' 칸 표시/숨김
 function onRepeatChange() {
@@ -3017,7 +3023,7 @@ function addSchedule() {
     endTime: document.getElementById('sc-end').value || '',
     title,
     group: document.getElementById('sc-group').value,
-    person: document.getElementById('sc-group').value==='개인' ? document.getElementById('sc-person').value : '',
+    person: (document.getElementById('sc-group').value==='개인'||document.getElementById('sc-group').value==='근무') ? document.getElementById('sc-person').value : '',
     category: document.getElementById('sc-cat').value,
     repeat: document.getElementById('sc-repeat').value,
     monthDay: document.getElementById('sc-monthday').value || '',
@@ -3034,7 +3040,7 @@ function editSchedule(id) {
   document.getElementById('sc-end').value=ev.endTime||'';
   document.getElementById('sc-group').value=schedFormGroup;
   document.getElementById('sc-cat').innerHTML = schedCatOptions(schedFormGroup, ev.category);
-  document.getElementById('sc-person-field').style.display = schedFormGroup==='개인' ? '' : 'none';
+  document.getElementById('sc-person-field').style.display = (schedFormGroup==='개인'||schedFormGroup==='근무') ? '' : 'none';
   document.getElementById('sc-person').value = ev.person || currentUser();
   document.getElementById('sc-repeat').value=ev.repeat;
   document.getElementById('sc-monthday').value=ev.monthDay||'';
@@ -3726,7 +3732,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r28';
+const APP_VERSION = '2026.06.21-r29';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
