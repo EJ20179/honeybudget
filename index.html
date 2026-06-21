@@ -688,7 +688,10 @@ const PEOPLE = ['은정', '성현'];          // 부부 구분
 const INCOME_TYPES = ['월급', '상여', '부수입', '기타'];
 const EXPENSE_KINDS = ['공동지출', '아내 개별지출', '남편 개별지출'];
 const EXPENSE_CATS = ['식비','교통','통신','보험','병원','쇼핑','경조사','데이트','가전가구','여행','카드값','현금','기타'];
-const PAY_METHODS = ['생활비통장','카드','현금','계좌이체','기타'];
+const PAY_METHODS = ['생활비통장','신용카드','체크카드','현금','계좌이체','기타'];
+// 결제수단별 색상/순서 (대시보드 비율 표시)
+const PAY_COLORS = { '신용카드':'var(--coral)', '체크카드':'var(--mint)', '현금':'#b89a82', '계좌이체':'#8fb8d8', '생활비통장':'var(--beige-deep)', '기타':'#bba99a' };
+const PAY_ORDER = ['신용카드','체크카드','현금','계좌이체','생활비통장','기타'];
 const DEPOSIT_FROM = ['은정','성현','공동','기타'];   // 생활비 통장에 누가 이체했는지
 const SAVE_PURPOSES = ['집 장만','비상금','임신·육아','여행','가전가구','기타'];
 const PRIORITIES = ['높음','보통','낮음'];
@@ -1224,6 +1227,16 @@ function sumByPayment(ym, method) {
   return db.expenses.filter(e => inMonth(e.date, ym) && e.payment===method)
                     .reduce((s,e)=>s+num(e.amount),0);
 }
+// 결제수단별 지출 합계 맵 (옛 '카드' 데이터는 신용카드로 합산)
+function paymentBreakdown(ym) {
+  const map = {};
+  db.expenses.filter(e => inMonth(e.date, ym)).forEach(e => {
+    let p = e.payment || '기타';
+    if (p === '카드') p = '신용카드';   // 예전 데이터 호환
+    map[p] = (map[p]||0) + num(e.amount);
+  });
+  return map;
+}
 
 /* =========================================================================
    ⑦ 대시보드
@@ -1249,9 +1262,11 @@ function renderDashboard() {
   const remain = cumulativeBalance(ym);            // 이월 포함 현재 남은 돈
 
   // 카드값/현금 요약
-  const cardSpent = sumByPayment(ym, '카드');
-  const cashSpent = sumByPayment(ym, '현금');
-  const cardCatSpent = (sumByCategory(ym)['카드값'] || 0);
+  // 결제수단별 비율 (신용/체크/현금/계좌이체/통장 따로)
+  const payMap = paymentBreakdown(ym);
+  const payBars = PAY_ORDER.filter(p => payMap[p] > 0).map(p =>
+    `<div class="bar-row"><span class="name">${p}</span><div class="bar-track"><div class="b" style="width:${pctOf(payMap[p], expense)}%;background:${PAY_COLORS[p]}"></div></div><span class="amt">${won(payMap[p])} <small style="color:var(--text-soft)">${pctOf(payMap[p], expense)}%</small></span></div>`
+  ).join('') || '<div style="font-size:12.5px;color:var(--text-soft);padding:6px 0">이 달 지출 내역이 없어요</div>';
 
   // 대출 잔액
   const loanBalance = db.loans.reduce((s,l)=>s+num(l.balance),0);
@@ -1349,11 +1364,9 @@ function renderDashboard() {
   // ----- 카드/현금/비상금 요약 -----
   if (widgetOn('account')) parts.account = `
     <div class="card clickable" onclick="goto('account')">
-      <div class="card-title">💳 카드 · 현금 · 비상금 요약</div>
+      <div class="card-title">💳 결제수단별 비율 <span class="badge">${ym}</span></div>
       <div class="bar-chart">
-        <div class="bar-row"><span class="name">카드 결제</span><div class="bar-track"><div class="b" style="width:${pctOf(cardSpent, expense)}%;background:var(--coral)"></div></div><span class="amt">${won(cardSpent)}</span></div>
-        <div class="bar-row"><span class="name">현금 결제</span><div class="bar-track"><div class="b" style="width:${pctOf(cashSpent, expense)}%;background:var(--mint)"></div></div><span class="amt">${won(cashSpent)}</span></div>
-        <div class="bar-row"><span class="name">카드값 상환</span><div class="bar-track"><div class="b" style="width:${pctOf(cardCatSpent, expense)}%;background:var(--brown)"></div></div><span class="amt">${won(cardCatSpent)}</span></div>
+        ${payBars}
       </div>
       <div class="pill-summary" style="margin-top:16px;margin-bottom:0">
         <div class="pill ${acBalance>=0?'mint':'coral'}">👛 생활비 통장 잔액 <b>${won(acBalance)}</b></div>
@@ -3652,7 +3665,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r26';
+const APP_VERSION = '2026.06.21-r27';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
