@@ -3331,7 +3331,8 @@ function renderBackup() {
           <h3 style="font-size:14px;color:var(--brown-deep);margin-bottom:8px">📤 내보내기</h3>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
             <button class="btn btn-primary" onclick="exportJSON()">📦 JSON 백업 받기</button>
-            <button class="btn btn-soft" onclick="exportCSV()">📊 CSV(엑셀) 내보내기</button>
+            <button class="btn btn-soft" onclick="exportExcel()">📑 엑셀(시트별) 내보내기</button>
+            <button class="btn btn-soft" onclick="exportCSV()">📊 CSV(한 시트) 내보내기</button>
           </div>
           <p style="font-size:12.5px;color:var(--text-soft);margin-top:8px">JSON은 전체 데이터를, CSV는 수입·지출·저축 내역을 엑셀에서 열 수 있는 형식으로 저장합니다.</p>
         </div>
@@ -3393,6 +3394,50 @@ function exportCSV() {
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   downloadBlob(blob, `우리집예산노트_내역_${today()}.csv`);
   toast('CSV 파일을 내려받았어요 📊');
+}
+// ---------- 엑셀(시트별) 내보내기: 항목별 시트 + 월별 요약 (라이브러리 없이 다중 시트) ----------
+function xmlEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c])); }
+function xlCell(v){
+  if (typeof v === 'number' && isFinite(v)) return `<Cell><Data ss:Type="Number">${v}</Data></Cell>`;
+  return `<Cell><Data ss:Type="String">${xmlEsc(v)}</Data></Cell>`;
+}
+function xlSheet(name, headers, rows){
+  const head = `<Row>${headers.map(h=>xlCell(h)).join('')}</Row>`;
+  const body = rows.map(r=>`<Row>${r.map(xlCell).join('')}</Row>`).join('');
+  return `<Worksheet ss:Name="${xmlEsc(name)}"><Table>${head}${body}</Table></Worksheet>`;
+}
+function exportExcel(){
+  const byDate = arr => arr.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const sheets = [];
+  sheets.push(xlSheet('수입', ['날짜','사람','종류','금액','메모'],
+    byDate(db.incomes).map(i=>[i.date, i.person, i.type, num(i.amount), i.memo||''])));
+  sheets.push(xlSheet('지출', ['날짜','구분','카테고리','세부','결제수단','상태','금액','메모'],
+    byDate(db.expenses).map(e=>[e.date, e.kind, e.category, e.sub||'', e.payment,
+      e.payment==='신용카드'?(e.paid?'결제완료':'결제예정'):'완료', num(e.amount), e.memo||''])));
+  sheets.push(xlSheet('저축', ['날짜','유형','목적','금액','목표','만기일','이월','메모'],
+    byDate(db.savings).map(s=>[s.date, s.dir==='out'?'찾기':'모으기', s.purpose, num(s.amount), num(s.goal)||'', s.maturity||'', s.opening?'이월':'', s.memo||''])));
+  sheets.push(xlSheet('생활비통장', ['날짜','이체한사람','금액','메모'],
+    byDate(db.accountDeposits).map(d=>[d.date, d.from, num(d.amount), d.memo||''])));
+  sheets.push(xlSheet('투자', ['종목','종류','명의','투자원금','평가금액','평가손익','만기일','상태','메모'],
+    db.investments.map(v=>[v.name, v.type, v.holder, num(v.invested), num(v.current), num(v.current)-num(v.invested), v.maturity||'', v.settled?'만기전환':'', v.memo||''])));
+  sheets.push(xlSheet('대출', ['대출명','최초대출금','현재잔액','금리(%)','월상환액','상환일','메모'],
+    db.loans.map(l=>[l.name, num(l.initial), num(l.balance), num(l.rate), num(l.monthly), num(l.payday), l.memo||''])));
+  sheets.push(xlSheet('대출상환내역', ['날짜','대출','원금','이자','합계','메모'],
+    byDate(db.repayments).map(r=>{ const loan=db.loans.find(l=>l.id===r.loanId); return [r.date, loan?loan.name:'', num(r.principal), num(r.interest), (num(r.principal)+num(r.interest))||num(r.amount), r.memo||'']; })));
+  sheets.push(xlSheet('장기프로젝트', ['프로젝트','목표금액','현재금액','목표일','우선순위','상태'],
+    db.projects.map(p=>[p.name, num(p.goal), num(p.current), p.targetDate||'', p.priority||'', p.status||''])));
+  // 월별 요약 (월 × 유형 합계)
+  const months = new Set();
+  ['incomes','expenses','savings'].forEach(k => db[k].forEach(x => x.date && months.add(x.date.slice(0,7))));
+  const sumRows = [...months].sort().map(ym => [ym, sumIncome(ym), sumExpense(ym), sumSaving(ym), cumulativeBalance(ym)]);
+  sheets.push(xlSheet('월별요약', ['월','수입','지출(결제완료)','순저축','남은돈(누적)'], sumRows));
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Sheet"?>\n`
+    + `<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n`
+    + sheets.join('\n') + `\n</Workbook>`;
+  const blob = new Blob([xml], {type:'application/vnd.ms-excel;charset=utf-8;'});
+  downloadBlob(blob, `우리집예산노트_${today()}.xls`);
+  toast('엑셀(시트별)로 내보냈어요 📑');
 }
 // 공통 다운로드
 function downloadBlob(blob, filename) {
@@ -3977,7 +4022,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r41';
+const APP_VERSION = '2026.06.21-r42';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
