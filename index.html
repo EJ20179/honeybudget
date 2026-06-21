@@ -1881,6 +1881,8 @@ function editIncome(id) { openEditModal('incomes', id); }
    ========================================================================= */
 let expenseFilter = 'all';   // 지출 내역 필터 (all/공동지출/아내 개별지출/남편 개별지출)
 function setExpenseFilter(v) { expenseFilter = v; renderExpense(); }
+let pendFilter = 'all';      // 신용카드 결제예정 필터 (all/공동/은정/성현)
+function setPendFilter(v) { pendFilter = v; renderExpense(); }
 function renderExpense() {
   const ym = curMonth;
   const list = db.expenses.filter(e => inMonth(e.date, ym))
@@ -1894,6 +1896,8 @@ function renderExpense() {
   const pend = pendingCardByPerson();
   const pendList = db.expenses.filter(e=>e.payment==='신용카드' && e.paid!==true)
                               .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const pendWho = e => e.kind==='아내 개별지출'?'은정':(e.kind==='남편 개별지출'?'성현':'공동');
+  const pendShown = pendFilter==='all' ? pendList : pendList.filter(e=>pendWho(e)===pendFilter);
 
   document.getElementById('page-expense').innerHTML = `
     <div class="card">
@@ -1946,15 +1950,16 @@ function renderExpense() {
 
     <div class="card">
       <div class="card-title">💳 신용카드 결제 예정 <span class="badge">${won(pend.total)}</span>
-        ${pend.total>0?`<button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="settleAllCards('')">전체 결제완료</button>`:''}</div>
+        ${pend.total>0?`<button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="settleAllCards('${pendFilter==='all'?'':pendFilter}')">${pendFilter==='all'?'전체':pendFilter} 결제완료</button>`:''}</div>
       <div class="pill-summary">
-        <div class="pill coral">공동 <b>${won(pend.공동)}</b></div>
-        <div class="pill eun-pill" style="background:var(--coral-soft);color:var(--coral-deep)">은정 <b>${won(pend.은정)}</b></div>
-        <div class="pill" style="background:#dde6f0;color:#5e7596">성현 <b>${won(pend.성현)}</b></div>
+        <div class="pill coral pill-filter ${pendFilter==='all'?'on':''}" onclick="setPendFilter('all')">전체 <b>${won(pend.total)}</b></div>
+        <div class="pill mint pill-filter ${pendFilter==='공동'?'on':''}" onclick="setPendFilter('공동')">공동 <b>${won(pend.공동)}</b></div>
+        <div class="pill pill-filter ${pendFilter==='은정'?'on':''}" style="background:var(--coral-soft);color:var(--coral-deep)" onclick="setPendFilter('은정')">은정 <b>${won(pend.은정)}</b></div>
+        <div class="pill pill-filter ${pendFilter==='성현'?'on':''}" style="background:#dde6f0;color:#5e7596" onclick="setPendFilter('성현')">성현 <b>${won(pend.성현)}</b></div>
       </div>
-      ${pendList.length ? `<div class="table-wrap"><table>
+      ${pendShown.length ? `<div class="table-wrap"><table>
         <thead><tr><th>사용일</th><th>구분</th><th>카테고리</th><th style="text-align:right">금액</th><th>메모</th><th></th></tr></thead>
-        <tbody>${pendList.map(e=>`
+        <tbody>${pendShown.map(e=>`
           <tr>
             <td>${e.date}</td>
             <td><span class="tag ${kindTag(e.kind)}">${e.kind.replace(' 개별지출','').replace('지출','')}</span></td>
@@ -4110,7 +4115,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r47';
+const APP_VERSION = '2026.06.21-r48';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {

@@ -4,7 +4,7 @@
 |------|------|
 | 문서명 | Business Requirements Document (사업 요구사항 정의서) |
 | 제품명 | 우리집 예산노트 (HoneyBudget) |
-| 버전 | v2026.06.21-r40 |
+| 버전 | v2026.06.21-r48 |
 | 작성일 | 2026-06-22 |
 | 작성자 | 곽은정 |
 | 배포 URL | https://ej20179.github.io/honeybudget/ |
