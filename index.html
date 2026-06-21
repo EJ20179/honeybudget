@@ -1157,6 +1157,13 @@ function changeMonth(delta) {
 function sumIncome(ym) {
   return db.incomes.filter(i => inMonth(i.date, ym)).reduce((s,i)=>s+num(i.amount),0);
 }
+// 누적 잔액: ym 말까지의 모든 수입 - 모든 지출 (전월 이월 자동 포함)
+function cumulativeBalance(ym) {
+  let inc = 0, exp = 0;
+  db.incomes.forEach(i => { if ((i.date||'').slice(0,7) <= ym) inc += num(i.amount); });
+  db.expenses.forEach(e => { if ((e.date||'').slice(0,7) <= ym) exp += num(e.amount); });
+  return inc - exp;
+}
 // 선택월 지출 합계 (구분별 필터 가능)
 function sumExpense(ym, kind) {
   return db.expenses.filter(e => inMonth(e.date, ym) && (!kind || e.kind===kind))
@@ -1199,8 +1206,9 @@ function renderDashboard() {
   const saveGoalRate = num(budget.saveRate);
   const actualSaveRate = income > 0 ? (saving / income * 100) : 0;
 
-  // 남은 예산 = 전체 수입 - 전체 지출
-  const remain = income - expense;
+  // 남은 돈 = 누적 잔액(전월 이월 자동 포함) = 이번 달까지 전체 수입 - 전체 지출
+  const carryIn = cumulativeBalance(prevYM(ym));   // 지난달 말까지 남은 돈(이월액)
+  const remain = cumulativeBalance(ym);            // 이월 포함 현재 남은 돈
 
   // 카드값/현금 요약
   const cardSpent = sumByPayment(ym, '카드');
@@ -1259,9 +1267,9 @@ function renderDashboard() {
       <span class="go">저축 관리 ›</span>
     </div>
     <div class="stat budget clickable" onclick="goto('budget')">
-      <div class="label">💵 남은 예산</div>
+      <div class="label">💰 남은 돈 (이월 포함)</div>
       <div class="value ${remain>=0?'pos':'neg'}">${won(remain)}</div>
-      <div class="sub">수입 ${wonShort(income)} − 지출 ${wonShort(expense)}</div>
+      <div class="sub">${carryIn?`전월 이월 ${carryIn>=0?'+':''}${wonShort(carryIn)} 포함`:'이번 달 수입 − 지출'}</div>
       <span class="go">예산 설정 ›</span>
     </div>
   </div>`;
@@ -3487,7 +3495,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r20';
+const APP_VERSION = '2026.06.21-r21';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
