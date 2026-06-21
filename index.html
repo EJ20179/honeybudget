@@ -424,6 +424,12 @@ tr:hover td { background: var(--cream); }
 .wtoggle.on { background: var(--coral-soft); color: var(--coral-deep); border-color: var(--coral); }
 .wtoggle input { accent-color: var(--coral-deep); width: 15px; height: 15px; }
 
+/* 메모판 2단 (왼쪽 달력 / 오른쪽 메모) */
+.memoboard { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 18px; align-items: start; }
+.memoboard-cal-h { font-size: 13px; font-weight: 700; color: var(--brown-deep); margin-bottom: 8px; }
+.memoboard-cal-h span { font-size: 11px; color: var(--text-soft); font-weight: 600; }
+@media (max-width: 760px) { .memoboard { grid-template-columns: 1fr; gap: 16px; } }
+
 /* 우리집 메모판 */
 .memo-userbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--cream-2); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; }
 .memo-userbar .lbl { font-size: 13px; font-weight: 700; color: var(--brown); }
@@ -1406,9 +1412,15 @@ function renderDashboard() {
         <button class="${currentUser()==='성현'?'on':''}" onclick="setMemoUser('성현')">성현</button>
       </span>
     </div>
+    <div class="memoboard">
+      <div class="memoboard-cal">
+        <div class="memoboard-cal-h">🗓️ ${ym} <span>· 날짜를 누르면 일정 추가</span></div>
+        ${calendarHTML(ym, 'calDayGoSchedule')}
+      </div>
+      <div class="memoboard-memo">
     <div class="memo-add">
       <select id="dash-memo-author" title="작성자">${PEOPLE.map(p=>`<option ${p===currentUser()?'selected':''}>${p}</option>`).join('')}</select>
-      <input type="text" id="dash-memo-input" placeholder="메모를 적고 Enter (예: 주말 장보기, 관리비 납부, 부모님 선물)" onkeydown="if(event.key==='Enter'){event.preventDefault();addMemo();}">
+      <input type="text" id="dash-memo-input" placeholder="메모를 적고 Enter (예: 주말 장보기, 관리비)" onkeydown="if(event.key==='Enter'){event.preventDefault();addMemo();}">
       <button class="btn btn-primary btn-sm" onclick="addMemo()">＋ 추가</button>
     </div>
     ${db.memos.length ? `<div class="memo-grid">${
@@ -1443,6 +1455,8 @@ function renderDashboard() {
       </div>`;
       }).join('')
     }</div>` : emptyBox('아직 메모가 없어요','위에 적고 추가하면 부부가 함께 보는 메모가 돼요')}
+      </div>
+    </div>
   </div>`;
 
   // ----- 최근 입력 내역 -----
@@ -2771,8 +2785,9 @@ function eventsOnDay(ym, day) {
     return cur >= s && cur <= e;   // 기간(시작~종료) 포함
   });
 }
-// 월 달력 HTML
-function calendarHTML(ym) {
+// 월 달력 HTML (onClickFn: 날짜 클릭 시 호출할 함수명, 기본 pickCalDay)
+function calendarHTML(ym, onClickFn) {
+  const clickFn = onClickFn || 'pickCalDay';
   const [y,m] = ym.split('-').map(Number);
   const startW = new Date(y, m-1, 1).getDay();   // 1일의 요일
   const days = new Date(y, m, 0).getDate();       // 그 달 일수
@@ -2791,17 +2806,22 @@ function calendarHTML(ym) {
     const more = evs.length>3 ? `<div class="cal-more">+${evs.length-3}</div>` : '';
     const todayCls = (isThisMonth && d===today.getDate()) ? 'today' : '';
     const dd = String(d).padStart(2,'0');
-    cells += `<div class="cal-day ${todayCls}" onclick="pickCalDay('${ym}-${dd}')">
+    cells += `<div class="cal-day ${todayCls}" onclick="${clickFn}('${ym}-${dd}')">
       <div class="cal-num ${dc}">${d}</div>${shown}${more}</div>`;
   }
   return `<div class="cal">${head}${cells}</div>`;
 }
-// 달력에서 날짜 클릭 → 그 날짜로 일정 추가 준비
+// 달력에서 날짜 클릭 → 그 날짜로 일정 추가 준비 (일정 페이지)
 function pickCalDay(dateStr) {
   const el = document.getElementById('sc-date'); if (el) el.value = dateStr;
   const end = document.getElementById('sc-enddate'); if (end) end.value = '';
   toast(dateStr + ' 선택 — 아래에서 일정을 추가하세요 📆');
   const t = document.getElementById('sc-title'); if (t) t.scrollIntoView({ behavior:'smooth', block:'center' });
+}
+// 대시보드 메모판 달력에서 날짜 클릭 → 일정 페이지로 이동 후 그 날짜 준비
+function calDayGoSchedule(dateStr) {
+  goto('schedule');
+  setTimeout(() => pickCalDay(dateStr), 60);
 }
 
 function renderSchedule() {
@@ -3564,7 +3584,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r22';
+const APP_VERSION = '2026.06.21-r23';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
