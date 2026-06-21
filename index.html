@@ -811,8 +811,8 @@ function seedSampleData() {
     { id:uid(), date:d(25), title:'전세대출 상환', group:'재정', category:'대출상환',  repeat:'매월 반복', monthDay:'25', memo:'45만원 자동이체' },
     { id:uid(), date:d(25), title:'주택청약·적금', group:'재정', category:'적금·저축', repeat:'매월 반복', monthDay:'25', memo:'집 장만 적립' },
     // 개인
-    { id:uid(), date:d(28), title:'은정 정기검진', group:'개인', category:'병원', repeat:'한 번', startTime:'09:30', endTime:'10:30', memo:'공복 유지' },
-    { id:uid(), date:d(8),  title:'헬스장 PT',     group:'개인', category:'운동', repeat:'매월 반복', startTime:'19:00', memo:'주 2회' },
+    { id:uid(), date:d(28), title:'정기검진', group:'개인', person:'은정', category:'병원', repeat:'한 번', startTime:'09:30', endTime:'10:30', memo:'공복 유지' },
+    { id:uid(), date:d(8),  title:'헬스장 PT', group:'개인', person:'성현', category:'운동', repeat:'매월 반복', monthDay:'8', startTime:'19:00', memo:'주 2회' },
     // 가족
     { id:uid(), date:fmtDate(addMonths(now,2)), title:'결혼기념일 💕', group:'가족', category:'기념일', repeat:'한 번', memo:'1주년 여행 준비' },
     { id:uid(), date:fmtDate(addMonths(now,1)), endDate:fmtDate(addMonths(now,1)), title:'어머님 생신', group:'가족', category:'생일', repeat:'한 번', memo:'선물·외식 예약' },
@@ -2742,7 +2742,7 @@ function renderSchedule() {
           return `<div class="sched-item">
             <div class="sched-ic">${SCHED_ICON[ev.category]||'📌'}</div>
             <div class="sched-body">
-              <div class="sched-title">${esc(ev.title)} ${groupTag(evGroup(ev))} ${ev.repeat==='매월 반복'?`<span class="rep">${repText(ev)}</span>`:''}</div>
+              <div class="sched-title">${esc(ev.title)} ${groupTag(evGroup(ev))}${evGroup(ev)==='개인'&&ev.person?` <span class="tag ${personTag(ev.person)}">${ev.person}</span>`:''} ${ev.repeat==='매월 반복'?`<span class="rep">${repText(ev)}</span>`:''}</div>
               <div class="sched-sub">${schedRangeText(ev, when)} · ${schedTimeText(ev)} · ${ev.category}${ev.memo?' · '+esc(ev.memo):''}</div>
             </div>
             <div class="sched-dday ${d.cls}">${d.txt}</div>
@@ -2761,6 +2761,7 @@ function renderSchedule() {
         <div class="field"><label>시작 시간 <span style="color:var(--text-soft)">(선택)</span></label><input type="time" id="sc-start"></div>
         <div class="field"><label>종료 시간 <span style="color:var(--text-soft)">(선택)</span></label><input type="time" id="sc-end"></div>
         <div class="field"><label>분류</label><select id="sc-group" onchange="onSchedGroupChange()">${SCHEDULE_GROUPS.map(g=>`<option ${g===schedFormGroup?'selected':''}>${g}</option>`).join('')}</select></div>
+        <div class="field" id="sc-person-field" style="display:${schedFormGroup==='개인'?'':'none'}"><label>누구 일정</label><select id="sc-person">${PEOPLE.map(p=>`<option ${p===currentUser()?'selected':''}>${p}</option>`).join('')}</select></div>
         <div class="field"><label>종류</label><select id="sc-cat" onchange="onSchedCatChange()">${schedCatOptions(schedFormGroup)}</select></div>
         <div class="field"><label>반복</label><select id="sc-repeat" onchange="onRepeatChange()">${SCHEDULE_REPEAT.map(r=>`<option>${r}</option>`).join('')}</select></div>
         <div class="field" id="sc-monthday-field" style="display:none"><label>매월 며칠</label>
@@ -2783,7 +2784,7 @@ function renderSchedule() {
         thisMonth.map(({ev,when})=>`<div class="sched-item">
           <div class="sched-day ${dayClass(when)}">${when.getDate()}<span>${WEEKDAYS[when.getDay()]}</span></div>
           <div class="sched-body">
-            <div class="sched-title">${SCHED_ICON[ev.category]||'📌'} ${esc(ev.title)} ${groupTag(evGroup(ev))} ${ev.repeat==='매월 반복'?`<span class="rep">${repText(ev)}</span>`:''}</div>
+            <div class="sched-title">${SCHED_ICON[ev.category]||'📌'} ${esc(ev.title)} ${groupTag(evGroup(ev))}${evGroup(ev)==='개인'&&ev.person?` <span class="tag ${personTag(ev.person)}">${ev.person}</span>`:''} ${ev.repeat==='매월 반복'?`<span class="rep">${repText(ev)}</span>`:''}</div>
             <div class="sched-sub">${schedTimeText(ev)}${ev.endDate&&ev.endDate!==ev.date?` · ~${fmtMD(parseYMD(ev.endDate))}까지`:''} · ${ev.category}${ev.memo?' · '+esc(ev.memo):''}</div>
           </div>
           <div class="row-actions">
@@ -2798,6 +2799,8 @@ function renderSchedule() {
 function onSchedGroupChange() {
   schedFormGroup = document.getElementById('sc-group').value;
   document.getElementById('sc-cat').innerHTML = schedCatOptions(schedFormGroup);
+  const pf = document.getElementById('sc-person-field');
+  if (pf) pf.style.display = schedFormGroup==='개인' ? '' : 'none';   // 개인 일정일 때만 인물 선택
 }
 // 반복 선택 변경 → '매월 며칠' 칸 표시/숨김
 function onRepeatChange() {
@@ -2823,6 +2826,7 @@ function addSchedule() {
     endTime: document.getElementById('sc-end').value || '',
     title,
     group: document.getElementById('sc-group').value,
+    person: document.getElementById('sc-group').value==='개인' ? document.getElementById('sc-person').value : '',
     category: document.getElementById('sc-cat').value,
     repeat: document.getElementById('sc-repeat').value,
     monthDay: document.getElementById('sc-monthday').value || '',
@@ -2839,6 +2843,8 @@ function editSchedule(id) {
   document.getElementById('sc-end').value=ev.endTime||'';
   document.getElementById('sc-group').value=schedFormGroup;
   document.getElementById('sc-cat').innerHTML = schedCatOptions(schedFormGroup, ev.category);
+  document.getElementById('sc-person-field').style.display = schedFormGroup==='개인' ? '' : 'none';
+  document.getElementById('sc-person').value = ev.person || currentUser();
   document.getElementById('sc-repeat').value=ev.repeat;
   document.getElementById('sc-monthday').value=ev.monthDay||'';
   onRepeatChange();
