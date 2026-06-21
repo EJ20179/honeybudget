@@ -680,7 +680,7 @@ const PAY_METHODS = ['생활비통장','카드','현금','계좌이체','기타'
 const DEPOSIT_FROM = ['은정','성현','공동','기타'];   // 생활비 통장에 누가 이체했는지
 const SAVE_PURPOSES = ['집 장만','비상금','임신·육아','여행','가전가구','기타'];
 const PRIORITIES = ['높음','보통','낮음'];
-const INVEST_TYPES = ['국내주식','해외주식','ETF','펀드','채권','코인','기타'];  // 투자 종류
+const INVEST_TYPES = ['국내주식','해외주식','ETF','펀드','채권','발행어음','CMA·파킹','코인','기타'];  // 투자 종류
 const INVEST_HOLDERS = ['은정','성현','공동'];   // 투자 계좌 명의
 const SCHEDULE_REPEAT = ['한 번','매월 반복'];   // 반복 여부
 // 일정 분류 (재정 / 개인 / 가족) 와 분류별 카테고리
@@ -3584,7 +3584,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r23';
+const APP_VERSION = '2026.06.21-r24';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
