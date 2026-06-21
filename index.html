@@ -494,6 +494,9 @@ tr:hover td { background: var(--cream); }
 .memo-comment-add button:hover { background: var(--coral-deep); }
 
 .pill-summary { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.pill-filter { cursor: pointer; transition: .12s; border: 1.5px solid transparent; }
+.pill-filter:hover { filter: brightness(0.97); }
+.pill-filter.on { border-color: var(--coral); box-shadow: 0 0 0 2px var(--coral-soft); }
 .pill { background: var(--cream-2); border-radius: 30px; padding: 8px 16px; font-size: 13px; font-weight: 600; color: var(--brown); }
 .pill b { color: var(--brown-deep); }
 .pill.coral { background: var(--coral-soft); color: var(--coral-deep); }
@@ -1809,6 +1812,8 @@ function buildRecent(limit) {
 /* =========================================================================
    ⑧ 수입 관리
    ========================================================================= */
+let incomeFilter = 'all';   // 수입 내역 필터 (all/은정/성현)
+function setIncomeFilter(v) { incomeFilter = v; renderIncome(); }
 function renderIncome() {
   const ym = curMonth;
   const list = db.incomes.filter(i => inMonth(i.date, ym))
@@ -1816,6 +1821,7 @@ function renderIncome() {
   const total = list.reduce((s,i)=>s+num(i.amount),0);
   const eun = list.filter(i=>i.person==='은정').reduce((s,i)=>s+num(i.amount),0);
   const sung = list.filter(i=>i.person==='성현').reduce((s,i)=>s+num(i.amount),0);
+  const shown = incomeFilter==='all' ? list : list.filter(i=>i.person===incomeFilter);
 
   document.getElementById('page-income').innerHTML = `
     <div class="card">
@@ -1832,15 +1838,15 @@ function renderIncome() {
     </div>
 
     <div class="card">
-      <div class="card-title">💰 ${ym} 수입 내역 <span class="badge">${list.length}건</span></div>
+      <div class="card-title">💰 ${ym} 수입 내역 <span class="badge">${shown.length}건${incomeFilter!=='all'?' · '+incomeFilter:''}</span></div>
       <div class="pill-summary">
-        <div class="pill coral">합계 <b>${won(total)}</b></div>
-        <div class="pill">은정 <b>${won(eun)}</b></div>
-        <div class="pill">성현 <b>${won(sung)}</b></div>
+        <div class="pill coral pill-filter ${incomeFilter==='all'?'on':''}" onclick="setIncomeFilter('all')">합계 <b>${won(total)}</b></div>
+        <div class="pill pill-filter ${incomeFilter==='은정'?'on':''}" onclick="setIncomeFilter('은정')">은정 <b>${won(eun)}</b></div>
+        <div class="pill pill-filter ${incomeFilter==='성현'?'on':''}" onclick="setIncomeFilter('성현')">성현 <b>${won(sung)}</b></div>
       </div>
-      ${list.length ? `<div class="table-wrap"><table>
+      ${shown.length ? `<div class="table-wrap"><table>
         <thead><tr><th>날짜</th><th>사람</th><th>종류</th><th style="text-align:right">금액</th><th>메모</th><th></th></tr></thead>
-        <tbody>${list.map(i=>`
+        <tbody>${shown.map(i=>`
           <tr>
             <td>${i.date}</td>
             <td><span class="tag ${personTag(i.person)}">${i.person}</span></td>
@@ -1873,6 +1879,8 @@ function editIncome(id) { openEditModal('incomes', id); }
 /* =========================================================================
    ⑨ 지출 관리
    ========================================================================= */
+let expenseFilter = 'all';   // 지출 내역 필터 (all/공동지출/아내 개별지출/남편 개별지출)
+function setExpenseFilter(v) { expenseFilter = v; renderExpense(); }
 function renderExpense() {
   const ym = curMonth;
   const list = db.expenses.filter(e => inMonth(e.date, ym))
@@ -1881,6 +1889,7 @@ function renderExpense() {
   const common = list.filter(e=>e.kind==='공동지출'&&counted(e)).reduce((s,e)=>s+num(e.amount),0);
   const wife = list.filter(e=>e.kind==='아내 개별지출'&&counted(e)).reduce((s,e)=>s+num(e.amount),0);
   const hus = list.filter(e=>e.kind==='남편 개별지출'&&counted(e)).reduce((s,e)=>s+num(e.amount),0);
+  const expShown = list.filter(counted).filter(e => expenseFilter==='all' || e.kind===expenseFilter);
   // 신용카드 결제 예정 (미결제 · 전체 기간)
   const pend = pendingCardByPerson();
   const pendList = db.expenses.filter(e=>e.payment==='신용카드' && e.paid!==true)
@@ -1963,16 +1972,16 @@ function renderExpense() {
     </div>
 
     <div class="card">
-      <div class="card-title">🧾 ${ym} 지출 내역(결제완료) <span class="badge">${won(total)}</span></div>
+      <div class="card-title">🧾 ${ym} 지출 내역(결제완료) <span class="badge">${expShown.length}건${expenseFilter!=='all'?' · '+expenseFilter.replace(' 개별지출','').replace('지출',''):''}</span></div>
       <div class="pill-summary">
-        <div class="pill coral">합계 <b>${won(total)}</b></div>
-        <div class="pill mint">공동 <b>${won(common)}</b></div>
-        <div class="pill">아내 개별 <b>${won(wife)}</b></div>
-        <div class="pill">남편 개별 <b>${won(hus)}</b></div>
+        <div class="pill coral pill-filter ${expenseFilter==='all'?'on':''}" onclick="setExpenseFilter('all')">합계 <b>${won(total)}</b></div>
+        <div class="pill mint pill-filter ${expenseFilter==='공동지출'?'on':''}" onclick="setExpenseFilter('공동지출')">공동 <b>${won(common)}</b></div>
+        <div class="pill pill-filter ${expenseFilter==='아내 개별지출'?'on':''}" onclick="setExpenseFilter('아내 개별지출')">아내 개별 <b>${won(wife)}</b></div>
+        <div class="pill pill-filter ${expenseFilter==='남편 개별지출'?'on':''}" onclick="setExpenseFilter('남편 개별지출')">남편 개별 <b>${won(hus)}</b></div>
       </div>
-      ${list.filter(counted).length ? `<div class="table-wrap"><table>
+      ${expShown.length ? `<div class="table-wrap"><table>
         <thead><tr><th>날짜</th><th>구분</th><th>카테고리</th><th>결제</th><th style="text-align:right">금액</th><th>메모</th><th></th></tr></thead>
-        <tbody>${list.filter(counted).map(e=>`
+        <tbody>${expShown.map(e=>`
           <tr>
             <td>${e.date}</td>
             <td><span class="tag ${kindTag(e.kind)}">${e.kind.replace(' 개별지출','').replace('지출','')}</span></td>
@@ -4038,7 +4047,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r44';
+const APP_VERSION = '2026.06.21-r45';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
