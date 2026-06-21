@@ -1,10 +1,17 @@
 /* 우리집 예산노트 서비스 워커
    - network-first: 온라인이면 항상 최신을 받아오고, 받은 걸 캐시에 저장
    - 오프라인이면 캐시로 보여줌 → 홈화면 바로가기에서도 업데이트가 잘 반영됨 */
-const CACHE = 'honeybudget-cache-v1';
+const CACHE = 'honeybudget-cache-v2';
 
 self.addEventListener('install', (e) => { self.skipWaiting(); });
-self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); });
+self.addEventListener('activate', (e) => {
+  e.waitUntil((async () => {
+    // 옛 캐시 정리
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
+});
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;

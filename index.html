@@ -3041,6 +3041,15 @@ function resetAll() {
 function renderSettings() {
   document.getElementById('page-settings').innerHTML = `
     <div class="card">
+      <div class="card-title">🔄 앱 업데이트</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="forceUpdate()">🔄 최신 버전으로 업데이트</button>
+        <span style="font-size:12px;color:var(--text-soft)">현재 버전 ${APP_VERSION}</span>
+      </div>
+      <p style="font-size:12px;color:var(--text-soft);margin-top:8px">홈 화면 바로가기에서 새 기능이 안 보이면 이 버튼을 한 번 누르세요. (데이터는 그대로 유지돼요)</p>
+    </div>
+
+    <div class="card">
       <div class="card-title">⚙️ 기본 설정</div>
       <div class="form-grid">
         <div class="field"><label>아내 이름(표시용)</label><input type="text" id="set-wife" value="${esc(db.settings.owners.wife)}"></div>
@@ -3477,9 +3486,30 @@ function applySetupFromHash() {
   history.replaceState(null, '', location.pathname + location.search);  // 주소에서 설정 부분 제거
 }
 
+// 앱 버전 (업데이트 확인용 — 배포마다 갱신)
+const APP_VERSION = '2026.06.21-r20';
+
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then(reg => { try { reg.update(); } catch(e){} }).catch(()=>{});
+  });
+}
+// 강제 최신화: 서비스워커 해제 + 캐시 삭제 + 새로고침 (바로가기 캐시 문제 해결용)
+async function forceUpdate() {
+  toast('최신 버전을 받아오는 중… 🔄');
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch(e) {}
+  // 캐시 무시하고 새로 받기
+  location.replace(location.pathname + '?u=' + Date.now());
 }
 
 // 시작: 데이터 로드 → PIN 화면
