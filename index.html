@@ -2,8 +2,15 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>우리집 예산노트 🏠 신혼부부 가계부</title>
+<!-- PWA: 홈화면 추가 + 항상 최신 반영(서비스워커) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#e8927c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="예산노트">
+<link rel="apple-touch-icon" href="icon-180.png">
 <style>
 /* =========================================================
    우리집 예산노트 - 신혼부부 예산관리 웹앱
@@ -3409,6 +3416,11 @@ function genSyncCode() {
   let c = 'home-';
   for (let i=0;i<10;i++) c += s[Math.floor(Math.random()*s.length)];
   const el = document.getElementById('sync-code'); if (el) el.value = c;
+}
+
+// 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(()=>{}); });
 }
 
 // 시작: 데이터 로드 → PIN 화면
