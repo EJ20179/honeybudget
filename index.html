@@ -261,7 +261,8 @@ tr:hover td { background: var(--cream); }
 /* 빈 데이터 안내 */
 .empty { text-align: center; padding: 36px 18px; color: var(--text-soft); }
 .empty .emoji { font-size: 40px; display: block; margin-bottom: 10px; }
-.empty .hint { font-size: 13px; margin-top: 6px; background: var(--cream-2); display: inline-block; padding: 8px 14px; border-radius: 12px; }
+.empty .empty-title { font-size: 14.5px; color: var(--text); font-weight: 600; }
+.empty .hint { font-size: 13px; margin-top: 14px; background: var(--cream-2); display: inline-block; padding: 8px 14px; border-radius: 12px; }
 
 /* 섹션 헤더 (폼 위) */
 .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
@@ -1582,7 +1583,7 @@ function pctOf(part, whole) {
 }
 // 빈 상태 박스
 function emptyBox(title, hint) {
-  return `<div class="empty"><span class="emoji">🌼</span>${title}<div class="hint">💡 ${hint}</div></div>`;
+  return `<div class="empty"><span class="emoji">🌼</span><div class="empty-title">${title}</div><div class="hint">💡 ${hint}</div></div>`;
 }
 // 최근 내역 통합 (수입/지출/저축)
 function buildRecent(limit) {
