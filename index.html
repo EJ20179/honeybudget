@@ -871,8 +871,8 @@ function seedSampleData() {
     { id:uid(), date:d(3),  kind:'공동지출',     category:'식비',    payment:'생활비통장', amount:420000, memo:'장보기·외식' },
     { id:uid(), date:d(5),  kind:'공동지출',     category:'통신',    payment:'생활비통장', amount:88000,  memo:'휴대폰+인터넷' },
     { id:uid(), date:d(7),  kind:'공동지출',     category:'보험',    payment:'계좌이체',   amount:180000, memo:'부부 실손보험' },
-    { id:uid(), date:d(12), kind:'아내 개별지출', category:'쇼핑',    payment:'신용카드',   amount:65000,  paid:false, memo:'화장품' },
-    { id:uid(), date:d(14), kind:'남편 개별지출', category:'교통',    payment:'신용카드',   amount:55000,  paid:false, memo:'주유' },
+    { id:uid(), date:d(12), kind:'아내 개별지출', category:'쇼핑',    payment:'신용카드',   amount:65000,  paid:false, useType:'용돈',   memo:'화장품' },
+    { id:uid(), date:d(14), kind:'남편 개별지출', category:'교통',    payment:'카드',       amount:55000,  useType:'생활비', memo:'주유(생활비)' },
     { id:uid(), date:d(16), kind:'공동지출',     category:'데이트',  payment:'생활비통장', amount:48000,  memo:'주말 영화·카페' },
     { id:uid(), date:d(18), kind:'공동지출',     category:'카드값',  payment:'계좌이체',   amount:300000, memo:'전월 카드대금 일부' },
   ];
@@ -1252,9 +1252,14 @@ function savedByPurpose() {
 }
 // 실제 지출(현금흐름)로 잡히는지 — 미결제 신용카드는 '결제 예정'이라 제외
 function counted(e) { return e.payment !== '신용카드' || e.paid === true; }
-// 선택월 지출 합계 (구분별 필터 가능 · 결제완료분만)
+// 집계용 실효 구분: 개별지출이라도 용도가 '생활비'(또는 미지정)면 공동으로 잡음. '용돈'만 개별로.
+function effKind(e) {
+  if (e.kind === '공동지출') return '공동지출';
+  return e.useType === '용돈' ? e.kind : '공동지출';
+}
+// 선택월 지출 합계 (실효 구분별 필터 가능 · 결제완료분만)
 function sumExpense(ym, kind) {
-  return db.expenses.filter(e => inMonth(e.date, ym) && counted(e) && (!kind || e.kind===kind))
+  return db.expenses.filter(e => inMonth(e.date, ym) && counted(e) && (!kind || effKind(e)===kind))
                     .reduce((s,e)=>s+num(e.amount),0);
 }
 // 선택월 저축 합계
@@ -1274,7 +1279,8 @@ function sumByCategory(ym) {
 function pendingCardByPerson() {
   const r = { 공동:0, 은정:0, 성현:0, total:0 };
   db.expenses.filter(e => e.payment==='신용카드' && e.paid!==true).forEach(e => {
-    const who = e.kind==='아내 개별지출' ? '은정' : (e.kind==='남편 개별지출' ? '성현' : '공동');
+    const ek = effKind(e);
+    const who = ek==='아내 개별지출' ? '은정' : (ek==='남편 개별지출' ? '성현' : '공동');
     r[who] += num(e.amount); r.total += num(e.amount);
   });
   return r;
@@ -1888,15 +1894,15 @@ function renderExpense() {
   const list = db.expenses.filter(e => inMonth(e.date, ym))
                           .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const total = list.filter(counted).reduce((s,e)=>s+num(e.amount),0);   // 결제완료(실지출)만
-  const common = list.filter(e=>e.kind==='공동지출'&&counted(e)).reduce((s,e)=>s+num(e.amount),0);
-  const wife = list.filter(e=>e.kind==='아내 개별지출'&&counted(e)).reduce((s,e)=>s+num(e.amount),0);
-  const hus = list.filter(e=>e.kind==='남편 개별지출'&&counted(e)).reduce((s,e)=>s+num(e.amount),0);
+  const common = list.filter(e=>effKind(e)==='공동지출'&&counted(e)).reduce((s,e)=>s+num(e.amount),0);  // 개별·생활비 포함
+  const wife = list.filter(e=>effKind(e)==='아내 개별지출'&&counted(e)).reduce((s,e)=>s+num(e.amount),0);  // 아내 용돈만
+  const hus = list.filter(e=>effKind(e)==='남편 개별지출'&&counted(e)).reduce((s,e)=>s+num(e.amount),0);  // 남편 용돈만
   const expShown = list.filter(counted).filter(e => expenseFilter==='all' || e.kind===expenseFilter);
   // 신용카드 결제 예정 (미결제 · 전체 기간)
   const pend = pendingCardByPerson();
   const pendList = db.expenses.filter(e=>e.payment==='신용카드' && e.paid!==true)
                               .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-  const pendWho = e => e.kind==='아내 개별지출'?'은정':(e.kind==='남편 개별지출'?'성현':'공동');
+  const pendWho = e => { const k=effKind(e); return k==='아내 개별지출'?'은정':(k==='남편 개별지출'?'성현':'공동'); };
   const pendShown = pendFilter==='all' ? pendList : pendList.filter(e=>pendWho(e)===pendFilter);
 
   document.getElementById('page-expense').innerHTML = `
@@ -1905,7 +1911,8 @@ function renderExpense() {
       <div class="hint-box">💡 공동지출과 개별지출을 나눠서 기록하면 예산 관리가 훨씬 편해져요. 카드값·현금·경조사도 카테고리로 선택하세요.</div>
       <div class="form-grid">
         <div class="field"><label>날짜</label><input type="date" id="exp-date" value="${today()}"></div>
-        <div class="field"><label>지출 구분</label><select id="exp-kind">${EXPENSE_KINDS.map(k=>`<option>${k}</option>`).join('')}</select></div>
+        <div class="field"><label>지출 구분</label><select id="exp-kind" onchange="onExpKindChange()">${EXPENSE_KINDS.map(k=>`<option>${k}</option>`).join('')}</select></div>
+        <div class="field" id="exp-use-field" style="display:none"><label>용도</label><select id="exp-use"><option>생활비</option><option>용돈</option></select></div>
         <div class="field"><label>카테고리</label><select id="exp-cat" onchange="onExpCatChange()">${EXPENSE_CATS.map(c=>`<option>${c}</option>`).join('')}</select></div>
         <div class="field" id="exp-sub-field" style="display:none"><label>세부</label><select id="exp-sub"></select></div>
         <div class="field" id="exp-loan-field" style="display:none"><label>어느 대출</label><select id="exp-loan">${db.loans.map(l=>`<option value="${l.id}">${esc(l.name)} (잔액 반영)</option>`).join('')}<option value="">— 잔액 반영 안 함(과거·기타) —</option></select></div>
@@ -1989,7 +1996,7 @@ function renderExpense() {
         <tbody>${expShown.map(e=>`
           <tr>
             <td>${e.date}</td>
-            <td><span class="tag ${kindTag(e.kind)}">${e.kind.replace(' 개별지출','').replace('지출','')}</span></td>
+            <td><span class="tag ${kindTag(e.kind)}">${e.kind.replace(' 개별지출','').replace('지출','')}</span>${e.kind!=='공동지출'?` <span class="tag" style="${e.useType==='용돈'?'background:var(--coral-soft);color:var(--coral-deep)':'background:var(--mint-soft);color:#5a8a6e'}">${e.useType==='용돈'?'용돈':'생활비→공동'}</span>`:''}</td>
             <td>${e.category}${e.sub?` · ${e.sub}`:''}</td>
             <td>${e.payment}${e.payment==='신용카드'&&e.paid?' <span class="tag" style="background:var(--mint-soft);color:#5a8a6e">결제완료</span>':''}</td>
             <td style="text-align:right" class="num out">${won(e.amount)}</td>
@@ -2009,12 +2016,14 @@ function addExpense() {
   if (amount <= 0) return toast('금액을 입력해 주세요 🙏');
   const payment = document.getElementById('exp-pay').value;
   const cat = document.getElementById('exp-cat').value;
+  const kind = document.getElementById('exp-kind').value;
   const subEl = document.getElementById('exp-sub');
   const sub = (EXPENSE_SUBCATS[cat] && subEl) ? subEl.value : '';
   const e = {
     id:uid(),
     date: document.getElementById('exp-date').value || today(),
-    kind: document.getElementById('exp-kind').value,
+    kind,
+    useType: kind!=='공동지출' ? document.getElementById('exp-use').value : '',  // 개별: 용돈/생활비
     category: cat, sub,
     payment,
     paid: payment==='신용카드' ? false : true,   // 신용카드는 '결제 예정'으로 시작
@@ -2035,6 +2044,11 @@ function addExpense() {
   renderExpense();
 }
 // 카테고리 선택 시 세부 항목 칸 표시/채움 (대출상환·저축)
+// 지출 구분 변경 → 개별지출일 때만 '용도(용돈/생활비)' 칸 표시
+function onExpKindChange() {
+  const kind = document.getElementById('exp-kind').value;
+  document.getElementById('exp-use-field').style.display = (kind!=='공동지출') ? '' : 'none';
+}
 function onExpCatChange() {
   const cat = document.getElementById('exp-cat').value;
   const field = document.getElementById('exp-sub-field');
@@ -3834,6 +3848,7 @@ const EDIT_SCHEMAS = {
   expenses: { title:'🧾 지출 수정', fields:[
     {k:'date',label:'날짜',t:'date'},
     {k:'kind',label:'지출 구분',t:'select',opt:EXPENSE_KINDS},
+    {k:'useType',label:'용도(개별: 용돈/생활비)',t:'sel2',opt:[['생활비','생활비(공동에 잡힘)'],['용돈','용돈(개별)']]},
     {k:'category',label:'카테고리',t:'select',opt:EXPENSE_CATS},
     {k:'sub',label:'세부(이자/원금·목적 등)',t:'text'},
     {k:'payment',label:'결제수단',t:'select',opt:PAY_METHODS},
@@ -4115,7 +4130,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r48';
+const APP_VERSION = '2026.06.21-r49';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
