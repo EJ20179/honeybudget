@@ -811,11 +811,12 @@ function seedSampleData() {
     { id:uid(), date:d(25), title:'전세대출 상환', group:'재정', category:'대출상환',  repeat:'매월 반복', memo:'45만원 자동이체' },
     { id:uid(), date:d(25), title:'주택청약·적금', group:'재정', category:'적금·저축', repeat:'매월 반복', memo:'집 장만 적립' },
     // 개인
-    { id:uid(), date:d(28), title:'은정 정기검진', group:'개인', category:'병원', repeat:'한 번', memo:'공복 유지' },
-    { id:uid(), date:d(8),  title:'헬스장 PT',     group:'개인', category:'운동', repeat:'매월 반복', memo:'주 2회' },
+    { id:uid(), date:d(28), title:'은정 정기검진', group:'개인', category:'병원', repeat:'한 번', startTime:'09:30', endTime:'10:30', memo:'공복 유지' },
+    { id:uid(), date:d(8),  title:'헬스장 PT',     group:'개인', category:'운동', repeat:'매월 반복', startTime:'19:00', memo:'주 2회' },
     // 가족
     { id:uid(), date:fmtDate(addMonths(now,2)), title:'결혼기념일 💕', group:'가족', category:'기념일', repeat:'한 번', memo:'1주년 여행 준비' },
-    { id:uid(), date:fmtDate(addMonths(now,1)), title:'어머님 생신',   group:'가족', category:'생일',   repeat:'한 번', memo:'선물·외식 예약' },
+    { id:uid(), date:fmtDate(addMonths(now,1)), endDate:fmtDate(addMonths(now,1)), title:'어머님 생신', group:'가족', category:'생일', repeat:'한 번', memo:'선물·외식 예약' },
+    { id:uid(), date:fmtDate(addMonths(now,3)), endDate:fmtDate(new Date(addMonths(now,3).getFullYear(), addMonths(now,3).getMonth(), addMonths(now,3).getDate()+2)), title:'제주도 여행 ✈️', group:'가족', category:'여행', repeat:'한 번', memo:'2박 3일' },
   ];
   // 우리집 메모판 샘플 (댓글 포함)
   db.memos = [
@@ -1162,9 +1163,8 @@ function renderDashboard() {
   const saveGoalRate = num(budget.saveRate);
   const actualSaveRate = income > 0 ? (saving / income * 100) : 0;
 
-  // 남은 예산 = (공동+개별 예산) - 실제 지출
-  const totalBudget = num(budget.common) + num(budget.wife) + num(budget.husband);
-  const remain = totalBudget - (common + personal);
+  // 남은 예산 = 전체 수입 - 전체 지출
+  const remain = income - expense;
 
   // 카드값/현금 요약
   const cardSpent = sumByPayment(ym, '카드');
@@ -1225,7 +1225,7 @@ function renderDashboard() {
     <div class="stat budget clickable" onclick="goto('budget')">
       <div class="label">💵 남은 예산</div>
       <div class="value ${remain>=0?'pos':'neg'}">${won(remain)}</div>
-      <div class="sub">${totalBudget>0 ? (remain>=0?'예산 내 사용 중':'예산 초과') : '예산 미설정'}</div>
+      <div class="sub">수입 ${wonShort(income)} − 지출 ${wonShort(expense)}</div>
       <span class="go">예산 설정 ›</span>
     </div>
   </div>`;
@@ -1326,7 +1326,7 @@ function renderDashboard() {
           <div class="sched-ic">${SCHED_ICON[ev.category]||'📌'}</div>
           <div class="sched-body">
             <div class="sched-title">${esc(ev.title)} ${ev.repeat==='매월 반복'?'<span class="rep">🔁 매월</span>':''}</div>
-            <div class="sched-sub">${fmtMD(when)} (${weekdayHTML(when)}) · ${ev.category}</div>
+            <div class="sched-sub">${schedRangeText(ev, when)} · ${schedTimeText(ev)}</div>
           </div>
           <div class="sched-dday ${d.cls}">${d.txt}</div>
         </div>`;
@@ -2621,6 +2621,20 @@ function dday(date) {
 }
 function fmtMD(date) { return `${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')}`; }
 const WEEKDAYS = ['일','월','화','수','목','금','토'];
+// 일정 시간 텍스트 (없으면 '하루 종일')
+function schedTimeText(ev) {
+  if (!ev.startTime) return '🕒 하루 종일';
+  return '🕒 ' + ev.startTime + (ev.endTime ? '~' + ev.endTime : '');
+}
+// 일정 기간 텍스트 (종료일이 시작일과 다르면 시작~종료)
+function schedRangeText(ev, when) {
+  let s = `${fmtMD(when)} (${weekdayHTML(when)})`;
+  if (ev.endDate && ev.endDate !== ev.date) {
+    const e = parseYMD(ev.endDate);
+    s += ` ~ ${fmtMD(e)} (${weekdayHTML(e)})`;
+  }
+  return s;
+}
 
 /* ---------- 공휴일 / 요일 색상 ----------
    - 양력 고정 공휴일 + 연도별 음력/대체 공휴일(설날·부처님오신날·추석 등)
@@ -2713,7 +2727,7 @@ function renderSchedule() {
             <div class="sched-ic">${SCHED_ICON[ev.category]||'📌'}</div>
             <div class="sched-body">
               <div class="sched-title">${esc(ev.title)} ${groupTag(evGroup(ev))} ${ev.repeat==='매월 반복'?'<span class="rep">🔁 매월</span>':''}</div>
-              <div class="sched-sub">${fmtMD(when)} (${weekdayHTML(when)}) · ${ev.category}${ev.memo?' · '+esc(ev.memo):''}</div>
+              <div class="sched-sub">${schedRangeText(ev, when)} · ${schedTimeText(ev)} · ${ev.category}${ev.memo?' · '+esc(ev.memo):''}</div>
             </div>
             <div class="sched-dday ${d.cls}">${d.txt}</div>
           </div>`;
@@ -2724,12 +2738,16 @@ function renderSchedule() {
     <!-- 일정 등록 -->
     <div class="card">
       <div class="section-head"><h3>➕ 일정 추가</h3></div>
+      <div class="hint-box">💡 <b>종료일</b>을 비우면 그날 하루만, 채우면 <b>시작~종료 기간</b> 일정이에요. <b>시간</b>을 비우면 '하루 종일'로 표시돼요.</div>
       <div class="form-grid">
-        <div class="field"><label>날짜</label><input type="date" id="sc-date" value="${today()}"></div>
+        <div class="field"><label>시작일</label><input type="date" id="sc-date" value="${today()}"></div>
+        <div class="field"><label>종료일 <span style="color:var(--text-soft)">(선택)</span></label><input type="date" id="sc-enddate"></div>
+        <div class="field"><label>시작 시간 <span style="color:var(--text-soft)">(선택)</span></label><input type="time" id="sc-start"></div>
+        <div class="field"><label>종료 시간 <span style="color:var(--text-soft)">(선택)</span></label><input type="time" id="sc-end"></div>
         <div class="field"><label>분류</label><select id="sc-group" onchange="onSchedGroupChange()">${SCHEDULE_GROUPS.map(g=>`<option ${g===schedFormGroup?'selected':''}>${g}</option>`).join('')}</select></div>
         <div class="field"><label>종류</label><select id="sc-cat" onchange="onSchedCatChange()">${schedCatOptions(schedFormGroup)}</select></div>
         <div class="field"><label>반복</label><select id="sc-repeat">${SCHEDULE_REPEAT.map(r=>`<option>${r}</option>`).join('')}</select></div>
-        <div class="field" style="grid-column:span 2"><label>제목</label><input type="text" id="sc-title" placeholder="예: 엄마 생신, 정기검진, 급여일"></div>
+        <div class="field" style="grid-column:span 2"><label>제목</label><input type="text" id="sc-title" placeholder="예: 엄마 생신, 정기검진, 여행"></div>
         <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="sc-memo" placeholder="예: 선물 준비하기"></div>
         <div class="field"><label>&nbsp;</label><button class="btn btn-primary" onclick="addSchedule()">＋ 추가하기</button></div>
       </div>
@@ -2743,7 +2761,7 @@ function renderSchedule() {
           <div class="sched-day ${dayClass(when)}">${when.getDate()}<span>${WEEKDAYS[when.getDay()]}</span></div>
           <div class="sched-body">
             <div class="sched-title">${SCHED_ICON[ev.category]||'📌'} ${esc(ev.title)} ${groupTag(evGroup(ev))} ${ev.repeat==='매월 반복'?'<span class="rep">🔁</span>':''}</div>
-            <div class="sched-sub">${weekdayHTML(when)}요일 · ${ev.category}${ev.memo?' · '+esc(ev.memo):''}</div>
+            <div class="sched-sub">${schedTimeText(ev)}${ev.endDate&&ev.endDate!==ev.date?` · ~${fmtMD(parseYMD(ev.endDate))}까지`:''} · ${ev.category}${ev.memo?' · '+esc(ev.memo):''}</div>
           </div>
           <div class="row-actions">
             <button class="icon-btn" onclick="editSchedule('${ev.id}')" title="수정">✏️</button>
@@ -2765,9 +2783,16 @@ function onSchedCatChange() {
 }
 function addSchedule() {
   const title = document.getElementById('sc-title').value.trim() || document.getElementById('sc-cat').value;
+  let startDate = document.getElementById('sc-date').value || today();
+  let endDate = document.getElementById('sc-enddate').value || '';
+  // 종료일이 시작일보다 빠르면 두 값을 자동으로 맞바꿈
+  if (endDate && endDate < startDate) { const t = startDate; startDate = endDate; endDate = t; }
   db.schedules.push({
     id:uid(),
-    date: document.getElementById('sc-date').value || today(),
+    date: startDate,
+    endDate: endDate,
+    startTime: document.getElementById('sc-start').value || '',
+    endTime: document.getElementById('sc-end').value || '',
     title,
     group: document.getElementById('sc-group').value,
     category: document.getElementById('sc-cat').value,
@@ -2780,6 +2805,9 @@ function editSchedule(id) {
   const ev = db.schedules.find(x=>x.id===id); if(!ev) return;
   schedFormGroup = evGroup(ev);
   document.getElementById('sc-date').value=ev.date;
+  document.getElementById('sc-enddate').value=ev.endDate||'';
+  document.getElementById('sc-start').value=ev.startTime||'';
+  document.getElementById('sc-end').value=ev.endTime||'';
   document.getElementById('sc-group').value=schedFormGroup;
   document.getElementById('sc-cat').innerHTML = schedCatOptions(schedFormGroup, ev.category);
   document.getElementById('sc-repeat').value=ev.repeat;
@@ -2798,7 +2826,9 @@ function shareSchedule() {
   let txt = `🏠 우리집 예산노트 · 다가오는 일정${schedFilter!=='전체'?` (${schedFilter})`:''}\n\n`;
   upcoming.forEach(({ev,when})=>{
     const d = dday(when);
-    txt += `${SCHED_ICON[ev.category]||'📌'} ${fmtMD(when)}(${WEEKDAYS[when.getDay()]}) ${ev.title}`
+    const range = (ev.endDate && ev.endDate!==ev.date) ? `~${fmtMD(parseYMD(ev.endDate))}` : '';
+    const time = ev.startTime ? ` ${ev.startTime}${ev.endTime?'~'+ev.endTime:''}` : ' 하루종일';
+    txt += `${SCHED_ICON[ev.category]||'📌'} ${fmtMD(when)}${range}(${WEEKDAYS[when.getDay()]})${time} ${ev.title}`
          + ` [${d.txt}]${ev.repeat==='매월 반복'?' 🔁':''}\n`;
   });
   txt += '\n💕 은정 ♡ 성현';
