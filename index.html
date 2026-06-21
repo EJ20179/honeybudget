@@ -870,7 +870,7 @@ function seedSampleData() {
     { id:uid(), name:'발행어음(6개월)',  type:'발행어음', holder:'공동', invested:5000000, current:5090000, updated:d(20), maturity:fmtDate(addMonths(now,4)), settled:false, memo:'연 3.6% · 만기 시 수입 전환' },
   ];
   db.savings = [
-    { id:uid(), date:d(25), purpose:'집 장만',    amount:1000000, goal:100000000, memo:'주택청약+적금' },
+    { id:uid(), date:d(25), purpose:'집 장만',    amount:1000000, goal:100000000, maturity:fmtDate(addMonths(now,18)), memo:'주택청약+적금(만기 1년6개월)' },
     { id:uid(), date:d(25), purpose:'비상금',      amount:300000,  goal:10000000,  memo:'CMA 통장' },
     { id:uid(), date:d(25), purpose:'임신·육아',  amount:200000,  goal:15000000,  memo:'육아 준비금' },
   ];
@@ -2235,6 +2235,7 @@ function renderSaving() {
         <div class="field"><label>저축 목적</label><select id="sv-purpose">${SAVE_PURPOSES.map(p=>`<option>${p}</option>`).join('')}</select></div>
         <div class="field"><label>금액(원)</label><input type="text" inputmode="numeric" id="sv-amount" placeholder="0" oninput="commaFormat(this)"></div>
         <div class="field"><label>목표 금액(원)</label><input type="text" inputmode="numeric" id="sv-goal" placeholder="0" oninput="commaFormat(this)"></div>
+        <div class="field"><label>만기일 <span style="color:var(--text-soft)">(선택·적금)</span></label><input type="date" id="sv-maturity"></div>
         <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="sv-memo" placeholder="예: 주택청약+적금"></div>
         <div class="field"><label>&nbsp;</label><button class="btn btn-primary" onclick="addSaving()">＋ 추가하기</button></div>
       </div>
@@ -2255,13 +2256,14 @@ function renderSaving() {
     <div class="card">
       <div class="card-title">🐷 ${ym} 저축 내역 <span class="badge">${list.length}건 · ${won(total)}</span></div>
       ${list.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>날짜</th><th>목적</th><th style="text-align:right">금액</th><th style="text-align:right">목표</th><th>메모</th><th></th></tr></thead>
+        <thead><tr><th>날짜</th><th>목적</th><th style="text-align:right">금액</th><th style="text-align:right">목표</th><th>만기일</th><th>메모</th><th></th></tr></thead>
         <tbody>${list.map(s=>`
           <tr>
             <td>${s.date}</td>
             <td>${s.purpose}</td>
             <td style="text-align:right" class="num in">${won(s.amount)}</td>
             <td style="text-align:right">${num(s.goal)>0?won(s.goal):'-'}</td>
+            <td style="font-size:12px;color:var(--text-soft)">${s.maturity?`⏳ ${s.maturity}<br><span style="font-size:11px">${dday(parseYMD(s.maturity)).txt}</span>`:'-'}</td>
             <td>${esc(s.memo)||'-'}</td>
             <td><div class="row-actions">
               <button class="icon-btn" onclick="editSaving('${s.id}')" title="수정">✏️</button>
@@ -2279,6 +2281,7 @@ function addSaving() {
     date: document.getElementById('sv-date').value || today(),
     purpose: document.getElementById('sv-purpose').value,
     amount, goal: num(document.getElementById('sv-goal').value),
+    maturity: document.getElementById('sv-maturity').value || '',
     memo: document.getElementById('sv-memo').value.trim()
   });
   save(); toast('저축을 저장했어요 🐷'); renderSaving();
@@ -3467,6 +3470,7 @@ const EDIT_SCHEMAS = {
     {k:'purpose',label:'저축 목적',t:'select',opt:SAVE_PURPOSES},
     {k:'amount',label:'금액(원)',t:'money'},
     {k:'goal',label:'목표 금액(원)',t:'money'},
+    {k:'maturity',label:'만기일(선택)',t:'date'},
     {k:'memo',label:'메모',t:'text',span:2},
   ]},
   accountDeposits: { title:'👛 통장 입금 수정', fields:[
@@ -3734,7 +3738,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r30';
+const APP_VERSION = '2026.06.21-r31';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
