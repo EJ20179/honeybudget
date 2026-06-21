@@ -2836,6 +2836,15 @@ function loadSyncCfg() {
   try { return Object.assign({ url:'', key:'', code:'', enabled:false }, JSON.parse(localStorage.getItem(SYNC_KEY) || '{}')); }
   catch(e) { return { url:'', key:'', code:'', enabled:false }; }
 }
+// Supabase 기본 URL만 남기기 (실수로 붙은 /rest/v1, 끝 슬래시, 공백 제거)
+function cleanSupabaseUrl(u) {
+  u = (u || '').trim();
+  u = u.replace(/\/+$/,'');              // 끝 슬래시 제거
+  u = u.replace(/\/rest(\/v\d+)?$/i,''); // /rest 또는 /rest/v1 제거
+  u = u.replace(/\/auth(\/v\d+)?$/i,''); // 혹시 /auth/v1 도 제거
+  u = u.replace(/\/+$/,'');
+  return u;
+}
 function saveSyncCfg() { localStorage.setItem(SYNC_KEY, JSON.stringify(syncCfg)); }
 
 // 동기화 상태 표시(설정 화면에 있을 때만)
@@ -2853,7 +2862,7 @@ function initSupabase() {
     return false;
   }
   try {
-    sb = supabase.createClient(syncCfg.url.trim(), syncCfg.key.trim());
+    sb = supabase.createClient(cleanSupabaseUrl(syncCfg.url), syncCfg.key.trim());
     syncReady = true;
     return true;
   } catch(e) {
@@ -2943,7 +2952,7 @@ document.addEventListener('visibilitychange', () => {
 
 // 설정 화면에서 호출: 동기화 설정 저장 후 연결
 function saveSyncSettings() {
-  syncCfg.url = document.getElementById('sync-url').value.trim();
+  syncCfg.url = cleanSupabaseUrl(document.getElementById('sync-url').value);
   syncCfg.key = document.getElementById('sync-key').value.trim();
   syncCfg.code = document.getElementById('sync-code').value.trim();
   syncCfg.enabled = document.getElementById('sync-enabled').checked;
