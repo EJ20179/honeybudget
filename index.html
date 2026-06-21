@@ -706,7 +706,7 @@ function emptyDB() {
     schedules: [],         // 부부가 공유하는 가계 일정
     memos: [],             // 우리집 메모판 (대시보드)
     budgets: {},
-    settings: { pin: '', owners: { wife:'은정', husband:'성현' }, hasSample: false, dashWidgets: {}, dashOrder: [], currentUser: '은정', menuOrder: [], menuNames: {} }
+    settings: { pin: '', owners: { wife:'은정', husband:'성현' }, hasSample: false, dashWidgets: {}, dashOrder: [], currentUser: '은정', menuOrder: [], menuNames: {}, incomeBasis: 'prev' }
   };
 }
 
@@ -734,6 +734,7 @@ function load() {
       if (!db.settings.menuOrder) db.settings.menuOrder = [];       // 메뉴 순서 보강
       if (!db.settings.menuNames) db.settings.menuNames = {};       // 메뉴 이름 보강
       if (!db.fixedExpenses) db.fixedExpenses = [];                 // 고정 지출 보강
+      if (!db.settings.incomeBasis) db.settings.incomeBasis = 'prev';// 수입 표시 기준 보강(지난달)
       if (!db.memos) db.memos = [];                                 // 메모 보강
     } catch(e) {
       db = emptyDB();
@@ -855,6 +856,8 @@ function fmtDate(d) {
 function fmtYM(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
+// 직전 달 'YYYY-MM'
+function prevYM(ym) { const [y,m] = ym.split('-').map(Number); return fmtYM(new Date(y, m-2, 1)); }
 // 개월 더하기
 function addMonths(d, m) { const x = new Date(d); x.setMonth(x.getMonth()+m); return x; }
 // 오늘 날짜 문자열
@@ -1145,7 +1148,10 @@ function sumByPayment(ym, method) {
    ========================================================================= */
 function renderDashboard() {
   const ym = curMonth;
-  const income  = sumIncome(ym);
+  // 수입 표시 기준: 'prev'(지난달·말일 월급) / 'this'(이번 달)
+  const incomeBasis = (db.settings && db.settings.incomeBasis) || 'this';
+  const incYM = incomeBasis === 'prev' ? prevYM(ym) : ym;
+  const income  = sumIncome(incYM);
   const expense = sumExpense(ym);
   const common  = sumExpense(ym, '공동지출');
   const wifeExp = sumExpense(ym, '아내 개별지출');
@@ -1199,9 +1205,9 @@ function renderDashboard() {
   if (widgetOn('summary')) parts.summary = `
   <div class="grid grid-4">
     <div class="stat income clickable" onclick="goto('income')">
-      <div class="label">📈 이번 달 총수입</div>
+      <div class="label">📈 ${incomeBasis==='prev'?'지난달 총수입':'이번 달 총수입'}</div>
       <div class="value">${won(income)}</div>
-      <div class="sub">${ym} 기준</div>
+      <div class="sub">${incYM} 기준${incomeBasis==='prev'?' · 말일 월급':''}</div>
       <span class="go">수입 관리 ›</span>
     </div>
     <div class="stat expense clickable" onclick="goto('expense')">
@@ -2939,6 +2945,14 @@ function renderSettings() {
         <div class="field"><label>&nbsp;</label><button class="btn btn-soft" onclick="saveOwners()">💾 이름 저장</button></div>
       </div>
       <p style="font-size:12px;color:var(--text-soft);margin-top:8px">※ 이름은 화면 표시에 사용돼요. (수입의 사람 구분 항목은 은정/성현으로 고정)</p>
+      <div class="memo-userbar" style="margin-top:14px;margin-bottom:0">
+        <span class="lbl">💰 대시보드 수입 표시 기준</span>
+        <div class="seg seg-sm">
+          <button class="${(db.settings.incomeBasis||'prev')==='this'?'on':''}" onclick="setIncomeBasis('this')">이번 달</button>
+          <button class="${(db.settings.incomeBasis||'prev')==='prev'?'on':''}" onclick="setIncomeBasis('prev')">지난 달</button>
+        </div>
+        <span style="font-size:11.5px;color:var(--text-soft)">말일에 월급 받으면 '지난 달'이 편해요</span>
+      </div>
     </div>
 
     <div class="card">
@@ -3034,6 +3048,12 @@ function saveOwners() {
   db.settings.owners.wife = document.getElementById('set-wife').value.trim() || '은정';
   db.settings.owners.husband = document.getElementById('set-husband').value.trim() || '성현';
   save(); toast('이름을 저장했어요 ✨');
+}
+// 대시보드 수입 표시 기준 (이번 달 / 지난 달)
+function setIncomeBasis(v) {
+  db.settings.incomeBasis = v;
+  save(); renderSettings();
+  toast(v==='prev' ? '대시보드 수입을 지난달 기준으로 표시해요' : '대시보드 수입을 이번 달 기준으로 표시해요');
 }
 // 메뉴 이름 변경 (입력 중 실시간 반영 — 사이드바만 갱신해 입력 포커스 유지)
 function renameMenu(id, val) {
