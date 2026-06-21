@@ -654,6 +654,18 @@ html, body { max-width: 100%; overflow-x: hidden; }
   </div>
 </div>
 
+<!-- 내역 수정 모달 -->
+<div class="modal-bg" id="editModalBg">
+  <div class="modal" style="max-width:480px;text-align:left;max-height:88vh;overflow-y:auto">
+    <h3 id="editModalTitle" style="margin-bottom:14px">수정</h3>
+    <div id="editModalFields" class="form-grid"></div>
+    <div class="modal-actions" style="margin-top:20px">
+      <button class="btn btn-soft" onclick="closeEditModal()">취소</button>
+      <button class="btn btn-primary" onclick="saveEditModal()">💾 저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- Supabase 클라이언트 (클라우드 동기화용 · 인터넷 연결 시에만 사용) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -1765,16 +1777,7 @@ function addIncome() {
   });
   save(); toast('수입을 저장했어요 ✨'); renderIncome();
 }
-function editIncome(id) {
-  const i = db.incomes.find(x=>x.id===id); if(!i) return;
-  document.getElementById('inc-date').value=i.date;
-  document.getElementById('inc-person').value=i.person;
-  document.getElementById('inc-type').value=i.type;
-  setMoney('inc-amount', i.amount);
-  document.getElementById('inc-memo').value=i.memo||'';
-  db.incomes = db.incomes.filter(x=>x.id!==id); save();
-  window.scrollTo({top:0,behavior:'smooth'}); toast('수정 후 다시 추가해 주세요 ✏️'); renderIncome();
-}
+function editIncome(id) { openEditModal('incomes', id); }
 
 /* =========================================================================
    ⑨ 지출 관리
@@ -1875,17 +1878,7 @@ function addExpense() {
   });
   save(); toast('지출을 저장했어요 ✨'); renderExpense();
 }
-function editExpense(id) {
-  const e = db.expenses.find(x=>x.id===id); if(!e) return;
-  document.getElementById('exp-date').value=e.date;
-  document.getElementById('exp-kind').value=e.kind;
-  document.getElementById('exp-cat').value=e.category;
-  document.getElementById('exp-pay').value=e.payment;
-  setMoney('exp-amount', e.amount);
-  document.getElementById('exp-memo').value=e.memo||'';
-  db.expenses = db.expenses.filter(x=>x.id!==id); save();
-  window.scrollTo({top:0,behavior:'smooth'}); toast('수정 후 다시 추가해 주세요 ✏️'); renderExpense();
-}
+function editExpense(id) { openEditModal('expenses', id); }
 
 /* ---------- 고정 지출 (매월 반복 항목) ---------- */
 // 해당 월에 그 고정항목이 실제 지출로 기록됐는지
@@ -1915,18 +1908,7 @@ function addFixedExpense() {
   });
   save(); toast('고정 지출을 등록했어요 📌'); renderExpense();
 }
-function editFixedExpense(id) {
-  const f = db.fixedExpenses.find(x=>x.id===id); if(!f) return;
-  document.getElementById('fx-name').value=f.name||'';
-  document.getElementById('fx-kind').value=f.kind;
-  document.getElementById('fx-cat').value=f.category;
-  document.getElementById('fx-pay').value=f.payment;
-  setMoney('fx-amount', f.amount);
-  document.getElementById('fx-day').value=f.day;
-  document.getElementById('fx-memo').value=f.memo||'';
-  db.fixedExpenses = db.fixedExpenses.filter(x=>x.id!==id); save();
-  window.scrollTo({top:0,behavior:'smooth'}); toast('수정 후 다시 등록해 주세요 ✏️'); renderExpense();
-}
+function editFixedExpense(id) { openEditModal('fixedExpenses', id); }
 function delFixedExpense(id) {
   confirmModal('📌','고정 지출 항목을 삭제할까요?','이미 기록된 지출 내역은 남고, 매월 항목만 사라져요.', ()=>{
     db.fixedExpenses = db.fixedExpenses.filter(x=>x.id!==id);
@@ -2064,15 +2046,7 @@ function addDeposit() {
   });
   save(); toast('생활비 통장에 입금했어요 👛'); renderAccount();
 }
-function editDeposit(id) {
-  const d = db.accountDeposits.find(x=>x.id===id); if(!d) return;
-  document.getElementById('ac-date').value=d.date;
-  document.getElementById('ac-from').value=d.from;
-  setMoney('ac-amount', d.amount);
-  document.getElementById('ac-memo').value=d.memo||'';
-  db.accountDeposits = db.accountDeposits.filter(x=>x.id!==id); save();
-  window.scrollTo({top:0,behavior:'smooth'}); toast('수정 후 다시 입금해 주세요 ✏️'); renderAccount();
-}
+function editDeposit(id) { openEditModal('accountDeposits', id); }
 
 /* =========================================================================
    ⑩ 예산 설정
@@ -2227,16 +2201,7 @@ function addSaving() {
   });
   save(); toast('저축을 저장했어요 🐷'); renderSaving();
 }
-function editSaving(id) {
-  const s = db.savings.find(x=>x.id===id); if(!s) return;
-  document.getElementById('sv-date').value=s.date;
-  document.getElementById('sv-purpose').value=s.purpose;
-  setMoney('sv-amount', s.amount);
-  setMoney('sv-goal', s.goal);
-  document.getElementById('sv-memo').value=s.memo||'';
-  db.savings = db.savings.filter(x=>x.id!==id); save();
-  window.scrollTo({top:0,behavior:'smooth'}); toast('수정 후 다시 추가해 주세요 ✏️'); renderSaving();
-}
+function editSaving(id) { openEditModal('savings', id); }
 
 /* =========================================================================
    주식 투자 관리 (저축의 일환)
@@ -2338,15 +2303,7 @@ function addInvestment() {
 function editInvestment(id) {
   const v = db.investments.find(x=>x.id===id); if(!v) return;
   if (v.settled) return toast('만기·수입전환된 항목은 수정할 수 없어요. 필요하면 삭제하세요.');
-  document.getElementById('iv-name').value=v.name;
-  document.getElementById('iv-type').value=v.type;
-  document.getElementById('iv-holder').value=v.holder;
-  setMoney('iv-invested', v.invested);
-  setMoney('iv-current', v.current);
-  document.getElementById('iv-maturity').value=v.maturity||'';
-  document.getElementById('iv-memo').value=v.memo||'';
-  db.investments = db.investments.filter(x=>x.id!==id); save();
-  window.scrollTo({top:0,behavior:'smooth'}); toast('수정 후 다시 등록해 주세요 ✏️'); renderInvest();
+  openEditModal('investments', id);
 }
 // 만기일이 지난 투자(발행어음 등) → 평가금액을 수입으로 자동 전환 (한 번만)
 function processMaturedInvestments() {
@@ -3405,6 +3362,89 @@ document.getElementById('modalConfirm').addEventListener('click', ()=>{
 });
 
 /* =========================================================================
+   내역 모달 편집 (수입·지출·저축·통장·투자·고정지출 그 자리 수정)
+   ========================================================================= */
+const EDIT_SCHEMAS = {
+  incomes: { title:'💰 수입 수정', fields:[
+    {k:'date',label:'날짜',t:'date'},
+    {k:'person',label:'사람',t:'select',opt:PEOPLE},
+    {k:'type',label:'수입 종류',t:'select',opt:INCOME_TYPES},
+    {k:'amount',label:'금액(원)',t:'money'},
+    {k:'memo',label:'메모',t:'text',span:2},
+  ]},
+  expenses: { title:'🧾 지출 수정', fields:[
+    {k:'date',label:'날짜',t:'date'},
+    {k:'kind',label:'지출 구분',t:'select',opt:EXPENSE_KINDS},
+    {k:'category',label:'카테고리',t:'select',opt:EXPENSE_CATS},
+    {k:'payment',label:'결제수단',t:'select',opt:PAY_METHODS},
+    {k:'amount',label:'금액(원)',t:'money'},
+    {k:'memo',label:'메모',t:'text',span:2},
+  ]},
+  savings: { title:'🐷 저축 수정', fields:[
+    {k:'date',label:'날짜',t:'date'},
+    {k:'purpose',label:'저축 목적',t:'select',opt:SAVE_PURPOSES},
+    {k:'amount',label:'금액(원)',t:'money'},
+    {k:'goal',label:'목표 금액(원)',t:'money'},
+    {k:'memo',label:'메모',t:'text',span:2},
+  ]},
+  accountDeposits: { title:'👛 통장 입금 수정', fields:[
+    {k:'date',label:'날짜',t:'date'},
+    {k:'from',label:'이체한 사람',t:'select',opt:DEPOSIT_FROM},
+    {k:'amount',label:'금액(원)',t:'money'},
+    {k:'memo',label:'메모',t:'text',span:2},
+  ]},
+  investments: { title:'📈 투자 종목 수정', fields:[
+    {k:'name',label:'종목명',t:'text',span:2},
+    {k:'type',label:'종류',t:'select',opt:INVEST_TYPES},
+    {k:'holder',label:'계좌 명의',t:'select',opt:INVEST_HOLDERS},
+    {k:'invested',label:'투자 원금(원)',t:'money'},
+    {k:'current',label:'현재 평가금액(원)',t:'money'},
+    {k:'maturity',label:'만기일(선택)',t:'date'},
+    {k:'memo',label:'메모',t:'text',span:2},
+  ]},
+  fixedExpenses: { title:'📌 고정 지출 수정', fields:[
+    {k:'name',label:'항목명',t:'text',span:2},
+    {k:'kind',label:'지출 구분',t:'select',opt:EXPENSE_KINDS},
+    {k:'category',label:'카테고리',t:'select',opt:EXPENSE_CATS},
+    {k:'payment',label:'결제수단',t:'select',opt:PAY_METHODS},
+    {k:'amount',label:'금액(원)',t:'money'},
+    {k:'day',label:'매월 며칠',t:'number'},
+    {k:'memo',label:'메모',t:'text',span:2},
+  ]},
+};
+let editCtx = null;
+function openEditModal(coll, id) {
+  const rec = (db[coll]||[]).find(x=>x.id===id);
+  const schema = EDIT_SCHEMAS[coll];
+  if (!rec || !schema) return;
+  editCtx = { coll, id };
+  document.getElementById('editModalTitle').textContent = schema.title;
+  document.getElementById('editModalFields').innerHTML = schema.fields.map(f=>{
+    const val = rec[f.k];
+    let input;
+    if (f.t==='select') input = `<select id="em-${f.k}">${f.opt.map(o=>`<option ${o===val?'selected':''}>${o}</option>`).join('')}</select>`;
+    else if (f.t==='money') input = `<input type="text" inputmode="numeric" id="em-${f.k}" value="${val?Number(val).toLocaleString('ko-KR'):''}" oninput="commaFormat(this)">`;
+    else if (f.t==='number') input = `<input type="number" id="em-${f.k}" value="${(val!=null&&val!=='')?val:''}">`;
+    else if (f.t==='date') input = `<input type="date" id="em-${f.k}" value="${val||''}">`;
+    else input = `<input type="text" id="em-${f.k}" value="${esc(val||'')}">`;
+    return `<div class="field" ${f.span?'style="grid-column:span 2"':''}><label>${f.label}</label>${input}</div>`;
+  }).join('');
+  document.getElementById('editModalBg').classList.add('show');
+}
+function saveEditModal() {
+  if (!editCtx) return;
+  const rec = (db[editCtx.coll]||[]).find(x=>x.id===editCtx.id);
+  if (!rec) { closeEditModal(); return; }
+  EDIT_SCHEMAS[editCtx.coll].fields.forEach(f=>{
+    const el = document.getElementById('em-'+f.k); if(!el) return;
+    if (f.t==='money' || f.t==='number') rec[f.k] = num(el.value);
+    else rec[f.k] = (el.value||'').trim();
+  });
+  save(); closeEditModal(); toast('수정했어요 ✏️'); renderPage(currentPage);
+}
+function closeEditModal() { editCtx = null; document.getElementById('editModalBg').classList.remove('show'); }
+
+/* =========================================================================
    ⑱ 부팅
    ========================================================================= */
 function bootApp() {
@@ -3612,7 +3652,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r25';
+const APP_VERSION = '2026.06.21-r26';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
