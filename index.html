@@ -221,7 +221,7 @@ input, select, textarea { font-family: inherit; }
 .field input, .field select, .field textarea {
   border: 1px solid var(--line); background: var(--cream);
   border-radius: 10px; padding: 9px 11px; font-size: 14px; color: var(--text);
-  transition: .15s; width: 100%;
+  transition: .15s; width: 100%; min-width: 0; max-width: 100%;
 }
 .field input:focus, .field select:focus, .field textarea:focus {
   outline: none; border-color: var(--coral); background: #fff;
@@ -455,6 +455,14 @@ html, body { max-width: 100%; overflow-x: hidden; }
 @media (max-width: 520px) {
   .grid-4, .grid-3 { grid-template-columns: 1fr; }
   .stat .value { font-size: 20px; }
+}
+/* 모바일: 입력 폼을 1열 전체폭으로 (칸 침범·잘림 방지) */
+@media (max-width: 640px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .form-grid .field { grid-column: auto !important; }   /* 인라인 span 2 무력화 */
+  .form-grid .field input,
+  .form-grid .field select,
+  .form-grid .field textarea { width: 100%; }
 }
 </style>
 </head>
