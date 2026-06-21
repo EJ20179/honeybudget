@@ -426,8 +426,11 @@ tr:hover td { background: var(--cream); }
 .wtoggle input { accent-color: var(--coral-deep); width: 15px; height: 15px; }
 
 /* 메모판 2단 (왼쪽 달력 / 오른쪽 메모) */
-.memoboard { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 18px; align-items: start; }
+.memoboard { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr); gap: 18px; align-items: start; }
 .memoboard-cal, .memoboard-memo { min-width: 0; }
+/* 메모 보관함 토글 */
+.memo-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; background: var(--cream-2); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 700; color: var(--brown-deep); margin-bottom: 12px; }
+.memo-toggle .mt-arrow { margin-left: auto; font-size: 12px; color: var(--text-soft); font-weight: 600; }
 .memoboard-cal-h { font-size: 13px; font-weight: 700; color: var(--brown-deep); margin-bottom: 8px; }
 .memoboard-cal-h span { font-size: 11px; color: var(--text-soft); font-weight: 600; }
 @media (max-width: 760px) { .memoboard { grid-template-columns: 1fr; gap: 16px; } }
@@ -1475,12 +1478,14 @@ function renderDashboard() {
         ${calendarHTML(ym, 'calDayGoSchedule')}
       </div>
       <div class="memoboard-memo">
+    <div class="memo-toggle" onclick="toggleMemoBox()">📦 메모 보관함 <span style="color:var(--coral-deep)">${db.memos.length}개</span><span class="mt-arrow">${memoBoxOpen?'▲ 접기':'▼ 펼치기'}</span></div>
+    ${memoBoxOpen ? `
     <div class="memo-add">
       <select id="dash-memo-author" title="작성자">${PEOPLE.map(p=>`<option ${p===currentUser()?'selected':''}>${p}</option>`).join('')}</select>
       <input type="text" id="dash-memo-input" placeholder="메모를 적고 Enter (예: 주말 장보기, 관리비)" onkeydown="if(event.key==='Enter'){event.preventDefault();addMemo();}">
       <button class="btn btn-primary btn-sm" onclick="addMemo()">＋ 추가</button>
-    </div>
-    ${db.memos.length ? `<div class="memo-grid">${
+    </div>` : ''}
+    ${memoBoxOpen ? (db.memos.length ? `<div class="memo-grid">${
       db.memos.slice().reverse().map((m,i)=>{
         const comments = m.comments || [];
         return `<div class="memo-note" style="background:${memoColors[i%memoColors.length]}">
@@ -1511,7 +1516,7 @@ function renderDashboard() {
         </div>
       </div>`;
       }).join('')
-    }</div>` : emptyBox('아직 메모가 없어요','위에 적고 추가하면 부부가 함께 보는 메모가 돼요')}
+    }</div>` : emptyBox('아직 메모가 없어요','위에 적고 추가하면 부부가 함께 보는 메모가 돼요')) : ''}
       </div>
     </div>
   </div>`;
@@ -1646,6 +1651,8 @@ function pairHTML(a, b) {
 }
 
 /* ---------- 우리집 메모판 ---------- */
+let memoBoxOpen = true;   // 메모 보관함 펼침 여부
+function toggleMemoBox() { memoBoxOpen = !memoBoxOpen; renderDashboard(); }
 function addMemo() {
   const el = document.getElementById('dash-memo-input');
   const t = (el && el.value || '').trim();
@@ -3871,7 +3878,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r33';
+const APP_VERSION = '2026.06.21-r34';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
