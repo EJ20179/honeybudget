@@ -1895,7 +1895,7 @@ function renderExpense() {
         <div class="field"><label>지출 구분</label><select id="exp-kind">${EXPENSE_KINDS.map(k=>`<option>${k}</option>`).join('')}</select></div>
         <div class="field"><label>카테고리</label><select id="exp-cat" onchange="onExpCatChange()">${EXPENSE_CATS.map(c=>`<option>${c}</option>`).join('')}</select></div>
         <div class="field" id="exp-sub-field" style="display:none"><label>세부</label><select id="exp-sub"></select></div>
-        <div class="field" id="exp-loan-field" style="display:none"><label>어느 대출</label><select id="exp-loan">${db.loans.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
+        <div class="field" id="exp-loan-field" style="display:none"><label>어느 대출</label><select id="exp-loan">${db.loans.map(l=>`<option value="${l.id}">${esc(l.name)} (잔액 반영)</option>`).join('')}<option value="">— 잔액 반영 안 함(과거·기타) —</option></select></div>
         <div class="field"><label>결제수단</label><select id="exp-pay">${PAY_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
         <div class="field"><label>금액(원)</label><input type="text" inputmode="numeric" id="exp-amount" placeholder="0" oninput="commaFormat(this)"></div>
         <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="exp-memo" placeholder="예: 장보기·외식"></div>
@@ -2565,6 +2565,8 @@ function renderLoan() {
       const repaid = num(l.initial)-num(l.balance);
       const pct = pctOf(repaid, l.initial);
       const reps = db.repayments.filter(r=>r.loanId===l.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+      // 지출관리에서 잔액 반영된 원금상환 합계
+      const expPrincipal = db.expenses.filter(e=>e.loanId===l.id && num(e.principalApplied)>0).reduce((s,e)=>s+num(e.principalApplied),0);
       return `
       <div class="card">
         <div class="card-title">🏦 ${esc(l.name)} <span class="badge">금리 ${num(l.rate)}%</span></div>
@@ -2576,7 +2578,7 @@ function renderLoan() {
         </div>
         <div class="progress-label"><span>상환 진행률</span><span class="pct">${pct}%</span></div>
         <div class="progress"><div class="fill brown" style="width:${pct}%"></div></div>
-        <div style="font-size:12px;color:var(--text-soft);margin-top:5px">남은 금액 ${won(l.balance)} · ${esc(l.memo)||'메모 없음'}</div>
+        <div style="font-size:12px;color:var(--text-soft);margin-top:5px">남은 금액 ${won(l.balance)} · ${esc(l.memo)||'메모 없음'}${expPrincipal>0?` · 지출관리 반영 원금 ${won(expPrincipal)}`:''}</div>
 
         <div class="section-head" style="margin-top:18px"><h3 style="font-size:14px">💸 월별 상환 내역</h3>
           <button class="btn btn-soft btn-sm" onclick="delLoan('${l.id}')">🗑️ 대출 삭제</button>
@@ -4022,7 +4024,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r42';
+const APP_VERSION = '2026.06.21-r43';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
