@@ -329,6 +329,20 @@ tr:hover td { background: var(--cream); }
 .sched-dday.coral { background: var(--coral); color: #fff; }
 .sched-dday.soft { color: var(--text-soft); }
 
+/* 고정 지출 목록 */
+.fx-list { display: flex; flex-direction: column; gap: 9px; margin-top: 14px; }
+.fx-row { display: flex; align-items: center; gap: 11px; background: var(--cream); border-radius: 14px; padding: 10px 12px; flex-wrap: wrap; }
+.fx-row.paid { background: var(--mint-soft); }
+.fx-day { background: var(--white); border-radius: 10px; padding: 6px 10px; font-size: 11px; color: var(--text-soft); font-weight: 600; text-align: center; flex-shrink: 0; box-shadow: var(--shadow-sm); line-height: 1.3; }
+.fx-day b { display: block; font-size: 16px; color: var(--brown-deep); }
+.fx-body { flex: 1; min-width: 120px; }
+.fx-name { font-size: 14px; font-weight: 700; color: var(--brown-deep); display: flex; align-items: center; gap: 7px; }
+.fx-sub { font-size: 12px; color: var(--text-soft); margin-top: 3px; }
+.fx-check { border: 1.5px solid var(--line); background: var(--white); border-radius: 20px; padding: 7px 14px; font-size: 12.5px; font-weight: 700; color: var(--text-soft); cursor: pointer; flex-shrink: 0; transition: .12s; }
+.fx-check:hover { border-color: var(--coral); }
+.fx-check.on { background: var(--mint); border-color: var(--mint); color: #fff; }
+.fx-tools { display: flex; gap: 5px; flex-shrink: 0; }
+
 /* 메뉴 편집 */
 .menu-edit { display: flex; flex-direction: column; gap: 8px; }
 .menu-edit-row { display: flex; align-items: center; gap: 10px; background: var(--cream); border-radius: 12px; padding: 8px 12px; border: 1.5px solid transparent; transition: .12s; }
@@ -688,6 +702,7 @@ function emptyDB() {
     loans: [], repayments: [], projects: [],
     accountDeposits: [],   // 생활비 통장 입금(이체) 내역
     investments: [],       // 주식·투자 종목 (저축의 일환)
+    fixedExpenses: [],     // 고정 지출(매월 반복 항목)
     schedules: [],         // 부부가 공유하는 가계 일정
     memos: [],             // 우리집 메모판 (대시보드)
     budgets: {},
@@ -718,6 +733,7 @@ function load() {
       if (!db.settings.currentUser) db.settings.currentUser = '은정';// 반응 사용자 보강
       if (!db.settings.menuOrder) db.settings.menuOrder = [];       // 메뉴 순서 보강
       if (!db.settings.menuNames) db.settings.menuNames = {};       // 메뉴 이름 보강
+      if (!db.fixedExpenses) db.fixedExpenses = [];                 // 고정 지출 보강
       if (!db.memos) db.memos = [];                                 // 메모 보강
     } catch(e) {
       db = emptyDB();
@@ -757,6 +773,12 @@ function seedSampleData() {
   db.accountDeposits = [
     { id:uid(), date:d(1), from:'은정', amount:800000,  memo:'6월 생활비 이체' },
     { id:uid(), date:d(1), from:'성현', amount:800000,  memo:'6월 생활비 이체' },
+  ];
+  // 고정 지출(매월 반복) 샘플
+  db.fixedExpenses = [
+    { id:uid(), name:'휴대폰+인터넷', kind:'공동지출', category:'통신', payment:'계좌이체', amount:88000,  day:5,  memo:'가족 결합' },
+    { id:uid(), name:'부부 실손보험', kind:'공동지출', category:'보험', payment:'계좌이체', amount:180000, day:7,  memo:'' },
+    { id:uid(), name:'넷플릭스',     kind:'공동지출', category:'기타', payment:'카드',     amount:17000,  day:15, memo:'프리미엄' },
   ];
   // 주식·투자 종목 (저축의 일환) — 투자 원금 대비 현재 평가금액
   db.investments = [
@@ -1698,6 +1720,38 @@ function renderExpense() {
     </div>
 
     <div class="card">
+      <div class="card-title">📌 고정 지출 (매월 자동 항목) <span class="badge">${db.fixedExpenses.length}개</span></div>
+      <div class="hint-box">💡 매월 반복되는 지출(구독료·보험·통신비 등)을 미리 등록하고, 실제로 나간 달엔 <b>체크</b>하면 그 달 지출로 기록돼요. (체크 해제하면 그 기록도 삭제)</div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:span 2"><label>항목명</label><input type="text" id="fx-name" placeholder="예: 넷플릭스 구독"></div>
+        <div class="field"><label>지출 구분</label><select id="fx-kind">${EXPENSE_KINDS.map(k=>`<option>${k}</option>`).join('')}</select></div>
+        <div class="field"><label>카테고리</label><select id="fx-cat">${EXPENSE_CATS.map(c=>`<option>${c}</option>`).join('')}</select></div>
+        <div class="field"><label>결제수단</label><select id="fx-pay">${PAY_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
+        <div class="field"><label>금액(원)</label><input type="text" inputmode="numeric" id="fx-amount" placeholder="0" oninput="commaFormat(this)"></div>
+        <div class="field"><label>매월 며칠</label><input type="number" id="fx-day" min="1" max="31" placeholder="예: 25"></div>
+        <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="fx-memo" placeholder="예: 가족 요금제"></div>
+        <div class="field"><label>&nbsp;</label><button class="btn btn-primary" onclick="addFixedExpense()">＋ 고정 지출 추가</button></div>
+      </div>
+      ${db.fixedExpenses.length ? `<div class="fx-list">${
+        db.fixedExpenses.slice().sort((a,b)=>num(a.day)-num(b.day)).map(f=>{
+          const paid = isFixedPaid(f.id, ym);
+          return `<div class="fx-row ${paid?'paid':''}">
+            <span class="fx-day">매월<b>${num(f.day)||'-'}</b>일</span>
+            <div class="fx-body">
+              <div class="fx-name">${esc(f.name||f.category)} <span class="tag ${kindTag(f.kind)}">${f.kind.replace(' 개별지출','').replace('지출','')}</span></div>
+              <div class="fx-sub">${f.category} · ${f.payment} · <b>${won(f.amount)}</b>${f.memo?' · '+esc(f.memo):''}</div>
+            </div>
+            <button class="fx-check ${paid?'on':''}" onclick="toggleFixedPaid('${f.id}')">${paid?'✅ 지출 완료':'⬜ 미지출'}</button>
+            <span class="fx-tools">
+              <button class="icon-btn" onclick="editFixedExpense('${f.id}')" title="수정">✏️</button>
+              <button class="icon-btn del" onclick="delFixedExpense('${f.id}')" title="삭제">🗑️</button>
+            </span>
+          </div>`;
+        }).join('')
+      }</div>` : emptyBox('등록된 고정 지출이 없어요','위에서 매월 반복되는 지출을 추가해 보세요. 예) 통신비 · 매월 5일 · 88,000원')}
+    </div>
+
+    <div class="card">
       <div class="card-title">🧾 ${ym} 지출 내역 <span class="badge">${list.length}건</span></div>
       <div class="pill-summary">
         <div class="pill coral">합계 <b>${won(total)}</b></div>
@@ -1747,6 +1801,70 @@ function editExpense(id) {
   document.getElementById('exp-memo').value=e.memo||'';
   db.expenses = db.expenses.filter(x=>x.id!==id); save();
   window.scrollTo({top:0,behavior:'smooth'}); toast('수정 후 다시 추가해 주세요 ✏️'); renderExpense();
+}
+
+/* ---------- 고정 지출 (매월 반복 항목) ---------- */
+// 해당 월에 그 고정항목이 실제 지출로 기록됐는지
+function isFixedPaid(fixedId, ym) {
+  return db.expenses.some(e => e.fixedId===fixedId && inMonth(e.date, ym));
+}
+// 고정 지출의 그 달 실제 지출 날짜 (말일 초과 시 말일로 보정)
+function fixedDate(ym, day) {
+  const [y,m] = ym.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  const d = Math.min(num(day) || 1, last);
+  return `${ym}-${String(d).padStart(2,'0')}`;
+}
+function addFixedExpense() {
+  const amount = num(document.getElementById('fx-amount').value);
+  const day = num(document.getElementById('fx-day').value);
+  if (amount <= 0) return toast('금액을 입력해 주세요 🙏');
+  if (day < 1 || day > 31) return toast('매월 며칠인지(1~31) 입력해 주세요 🙏');
+  db.fixedExpenses.push({
+    id:uid(),
+    name: document.getElementById('fx-name').value.trim(),
+    kind: document.getElementById('fx-kind').value,
+    category: document.getElementById('fx-cat').value,
+    payment: document.getElementById('fx-pay').value,
+    amount, day,
+    memo: document.getElementById('fx-memo').value.trim()
+  });
+  save(); toast('고정 지출을 등록했어요 📌'); renderExpense();
+}
+function editFixedExpense(id) {
+  const f = db.fixedExpenses.find(x=>x.id===id); if(!f) return;
+  document.getElementById('fx-name').value=f.name||'';
+  document.getElementById('fx-kind').value=f.kind;
+  document.getElementById('fx-cat').value=f.category;
+  document.getElementById('fx-pay').value=f.payment;
+  setMoney('fx-amount', f.amount);
+  document.getElementById('fx-day').value=f.day;
+  document.getElementById('fx-memo').value=f.memo||'';
+  db.fixedExpenses = db.fixedExpenses.filter(x=>x.id!==id); save();
+  window.scrollTo({top:0,behavior:'smooth'}); toast('수정 후 다시 등록해 주세요 ✏️'); renderExpense();
+}
+function delFixedExpense(id) {
+  confirmModal('📌','고정 지출 항목을 삭제할까요?','이미 기록된 지출 내역은 남고, 매월 항목만 사라져요.', ()=>{
+    db.fixedExpenses = db.fixedExpenses.filter(x=>x.id!==id);
+    save(); toast('고정 지출을 삭제했어요'); renderExpense();
+  });
+}
+// 이번 달 지출 체크/해제 — 체크하면 실제 지출로 기록, 해제하면 그 기록 삭제
+function toggleFixedPaid(id) {
+  const f = db.fixedExpenses.find(x=>x.id===id); if(!f) return;
+  const ym = curMonth;
+  if (isFixedPaid(id, ym)) {
+    db.expenses = db.expenses.filter(e => !(e.fixedId===id && inMonth(e.date, ym)));
+    save(); toast('이번 달 지출 체크를 해제했어요'); renderExpense();
+  } else {
+    db.expenses.push({
+      id:uid(), date: fixedDate(ym, f.day),
+      kind: f.kind, category: f.category, payment: f.payment,
+      amount: num(f.amount), memo: (f.name ? f.name+' ' : '') + '(고정지출)',
+      fixedId: id
+    });
+    save(); toast('이번 달 지출로 기록했어요 ✓'); renderExpense();
+  }
 }
 
 /* =========================================================================
@@ -2704,6 +2822,7 @@ function renderBackup() {
   const counts = {
     수입: db.incomes.length, 지출: db.expenses.length, 저축: db.savings.length,
     통장입금: db.accountDeposits.length, 투자종목: db.investments.length,
+    고정지출: db.fixedExpenses.length,
     대출: db.loans.length, 상환: db.repayments.length, 프로젝트: db.projects.length,
     일정: db.schedules.length, 메모: db.memos.length, 예산: Object.keys(db.budgets).length
   };
@@ -2712,7 +2831,7 @@ function renderBackup() {
       <div class="card-title">💾 데이터 백업 / 복원</div>
       <div class="hint-box">💡 데이터는 이 브라우저에만 저장돼요. 기기를 바꾸거나 안전하게 보관하려면 꼭 JSON 백업을 받아두세요!</div>
       <div class="pill-summary">
-        ${Object.entries(counts).map(([k,v])=>`<div class="pill">${k} <b>${v}${k==='예산'?'개월':(k==='투자종목'?'개':'건')}</b></div>`).join('')}
+        ${Object.entries(counts).map(([k,v])=>`<div class="pill">${k} <b>${v}${k==='예산'?'개월':((k==='투자종목'||k==='고정지출')?'개':'건')}</b></div>`).join('')}
       </div>
       <div class="grid grid-2" style="margin-top:8px">
         <div>
@@ -2792,7 +2911,7 @@ function downloadBlob(blob, filename) {
 // 샘플 데이터만 삭제
 function deleteSampleData() {
   confirmModal('🧺','샘플 데이터를 삭제할까요?','처음 제공된 예시 데이터를 모두 지웁니다. 직접 입력하신 데이터도 함께 지워질 수 있으니 백업을 권장해요.', ()=>{
-    db.incomes=[]; db.expenses=[]; db.savings=[]; db.loans=[]; db.repayments=[]; db.projects=[]; db.accountDeposits=[]; db.investments=[]; db.schedules=[]; db.memos=[]; db.budgets={};
+    db.incomes=[]; db.expenses=[]; db.savings=[]; db.loans=[]; db.repayments=[]; db.projects=[]; db.accountDeposits=[]; db.investments=[]; db.fixedExpenses=[]; db.schedules=[]; db.memos=[]; db.budgets={};
     db.settings.hasSample = false;
     save(); toast('샘플 데이터를 삭제했어요'); renderPage(currentPage); buildNav();
   });
