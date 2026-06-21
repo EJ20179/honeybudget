@@ -329,6 +329,25 @@ tr:hover td { background: var(--cream); }
 .hint-box:not(#ln-calc) { display: none; }
 .empty .hint { display: none; }
 
+/* 월 달력 */
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-head { text-align: center; font-size: 11.5px; font-weight: 800; color: var(--text-soft); padding: 4px 0 6px; }
+.cal-head.sun { color: #e0524a; } .cal-head.sat { color: #3f6fc4; }
+.cal-day { min-height: 70px; background: var(--cream); border-radius: 10px; padding: 4px 4px 5px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; overflow: hidden; transition: .1s; }
+.cal-day:hover { background: var(--beige); }
+.cal-day.empty { background: transparent; cursor: default; }
+.cal-day.today { outline: 2px solid var(--coral); }
+.cal-num { font-size: 12.5px; font-weight: 700; color: #333; }
+.cal-num.sun { color: #e0524a; } .cal-num.sat { color: #3f6fc4; }
+.cal-ev { font-size: 9.5px; line-height: 1.35; border-radius: 4px; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.cal-more { font-size: 9px; color: var(--text-soft); padding-left: 3px; }
+@media (max-width: 520px) {
+  .cal { gap: 3px; }
+  .cal-day { min-height: 56px; border-radius: 8px; padding: 3px; }
+  .cal-num { font-size: 11px; }
+  .cal-ev { font-size: 8px; padding: 0 3px; }
+}
+
 /* 일정 목록 */
 .sched-list { display: flex; flex-direction: column; gap: 9px; }
 .sched-item { display: flex; align-items: center; gap: 13px; background: var(--cream); border-radius: 14px; padding: 11px 14px; }
@@ -2741,6 +2760,50 @@ function passFilter(ev) { return schedFilter==='전체' || evGroup(ev)===schedFi
 
 function setSchedFilter(g) { schedFilter = g; renderSchedule(); }
 
+// 특정 날짜(day)에 해당하는 일정들 (필터 적용 · 매월반복/기간 모두 고려)
+function eventsOnDay(ym, day) {
+  const [y,m] = ym.split('-').map(Number);
+  const cur = new Date(y, m-1, day).getTime();
+  return db.schedules.filter(passFilter).filter(ev => {
+    if (ev.repeat === '매월 반복') return monthlyDay(ev, y, m-1) === day;
+    const s = parseYMD(ev.date).getTime();
+    const e = ev.endDate ? parseYMD(ev.endDate).getTime() : s;
+    return cur >= s && cur <= e;   // 기간(시작~종료) 포함
+  });
+}
+// 월 달력 HTML
+function calendarHTML(ym) {
+  const [y,m] = ym.split('-').map(Number);
+  const startW = new Date(y, m-1, 1).getDay();   // 1일의 요일
+  const days = new Date(y, m, 0).getDate();       // 그 달 일수
+  const today = startOfToday();
+  const isThisMonth = fmtYM(today) === ym;
+  const head = WEEKDAYS.map((w,i)=>`<div class="cal-head ${i===0?'sun':(i===6?'sat':'')}">${w}</div>`).join('');
+  let cells = '';
+  for (let i=0;i<startW;i++) cells += `<div class="cal-day empty"></div>`;
+  for (let d=1; d<=days; d++) {
+    const dc = dayClass(new Date(y, m-1, d));
+    const evs = eventsOnDay(ym, d);
+    const shown = evs.slice(0,3).map(ev=>{
+      const c = GROUP_COLOR[evGroup(ev)] || GROUP_COLOR['재정'];
+      return `<div class="cal-ev" style="background:${c.bg};color:${c.fg}" title="${esc(ev.title)}">${SCHED_ICON[ev.category]||'•'} ${esc(ev.title)}</div>`;
+    }).join('');
+    const more = evs.length>3 ? `<div class="cal-more">+${evs.length-3}</div>` : '';
+    const todayCls = (isThisMonth && d===today.getDate()) ? 'today' : '';
+    const dd = String(d).padStart(2,'0');
+    cells += `<div class="cal-day ${todayCls}" onclick="pickCalDay('${ym}-${dd}')">
+      <div class="cal-num ${dc}">${d}</div>${shown}${more}</div>`;
+  }
+  return `<div class="cal">${head}${cells}</div>`;
+}
+// 달력에서 날짜 클릭 → 그 날짜로 일정 추가 준비
+function pickCalDay(dateStr) {
+  const el = document.getElementById('sc-date'); if (el) el.value = dateStr;
+  const end = document.getElementById('sc-enddate'); if (end) end.value = '';
+  toast(dateStr + ' 선택 — 아래에서 일정을 추가하세요 📆');
+  const t = document.getElementById('sc-title'); if (t) t.scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
 function renderSchedule() {
   const ym = curMonth;
   // 다가오는 일정 (분류 필터 적용, 다음 발생일 기준 정렬)
@@ -2773,6 +2836,12 @@ function renderSchedule() {
         <span style="font-size:13px;color:var(--text-soft);font-weight:600;margin-right:4px">분류 보기</span>
         ${filterBtns}
       </div>
+    </div>
+
+    <!-- 달력 -->
+    <div class="card">
+      <div class="card-title">🗓️ ${ym} 달력${schedFilter!=='전체'?` · ${schedFilter}`:''}<span style="font-size:11.5px;font-weight:600;color:var(--text-soft);margin-left:8px">날짜를 누르면 그 날로 일정 추가</span></div>
+      ${calendarHTML(ym)}
     </div>
 
     <!-- 다가오는 일정 -->
@@ -3495,7 +3564,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r21';
+const APP_VERSION = '2026.06.21-r22';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
