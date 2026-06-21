@@ -2320,13 +2320,13 @@ function renderSaving() {
         <div class="field"><label>금액(원)</label><input type="text" inputmode="numeric" id="sv-amount" placeholder="0" oninput="commaFormat(this)"></div>
         <div class="field"><label>목표 금액(원)</label><input type="text" inputmode="numeric" id="sv-goal" placeholder="0" oninput="commaFormat(this)"></div>
         <div class="field"><label>만기일 <span style="color:var(--text-soft)">(선택·적금)</span></label><input type="date" id="sv-maturity"></div>
-        <div class="field"><label>구분</label>
-          <label style="display:flex;align-items:center;gap:7px;padding:9px 0;font-size:13px;color:var(--brown);font-weight:600">
-            <input type="checkbox" id="sv-opening" style="width:16px;height:16px;accent-color:var(--coral-deep)"> 기존에 모아둔 금액(이월)
+        <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="sv-memo" placeholder="예: 주택청약+적금"></div>
+        <div class="field" style="grid-column:1/-1">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--brown);font-weight:600;cursor:pointer">
+            <input type="checkbox" id="sv-opening" style="width:17px;height:17px;accent-color:var(--coral-deep);flex-shrink:0"> 기존에 모아둔 금액(이월) — 이번 달 저축엔 안 잡히고 목표 누적에만 더해져요
           </label>
         </div>
-        <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="sv-memo" placeholder="예: 주택청약+적금"></div>
-        <div class="field"><label>&nbsp;</label><button class="btn btn-primary" onclick="addSaving()">＋ 추가하기</button></div>
+        <div class="field" style="grid-column:1/-1"><button class="btn btn-primary" onclick="addSaving()">＋ 추가하기</button></div>
       </div>
     </div>
 
@@ -3971,7 +3971,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r39';
+const APP_VERSION = '2026.06.21-r40';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
