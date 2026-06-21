@@ -3108,6 +3108,19 @@ function renderSettings() {
       </div>
       <div id="syncStatus" class="sync-status ${syncReady?'ok':''}" style="margin-top:10px">${syncReady?'동기화 연결됨 ✓':'동기화 꺼짐 (설정 후 켜기)'}</div>
 
+      <div style="margin-top:14px;border-top:1px dashed var(--line);padding-top:14px">
+        <div style="font-size:13.5px;font-weight:800;color:var(--brown-deep);margin-bottom:4px">🔗 다른 기기 한 번에 연결</div>
+        <div class="hint-box" style="margin-bottom:10px">💡 아래 <b>설정 링크 복사</b>를 눌러 카톡으로 보낸 뒤, 다른 기기(휴대폰·크롬)에서 그 <b>링크만 열면 자동 연결</b>돼요. 더 이상 URL·키·코드를 따로 붙여넣지 않아도 됩니다!</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-primary btn-sm" onclick="copySetupLink()">🔗 설정 링크 복사</button>
+          <span style="font-size:11.5px;color:var(--text-soft)">두 사람만 공유하세요(가족 코드 포함)</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input type="text" id="sync-setupcode" placeholder="받은 설정 링크/코드 붙여넣기" style="flex:1;min-width:0;border:1px solid var(--line);background:var(--cream);border-radius:9px;padding:8px 10px;font-size:13px">
+          <button class="btn btn-soft btn-sm" onclick="applySetupCode()">적용</button>
+        </div>
+      </div>
+
       <details style="margin-top:14px">
         <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--brown-deep)">📋 처음 설정하는 방법 (1회만)</summary>
         <ol style="font-size:12.5px;color:var(--text);line-height:1.9;margin:10px 0 0 18px">
@@ -3259,6 +3272,7 @@ document.getElementById('modalConfirm').addEventListener('click', ()=>{
    ⑱ 부팅
    ========================================================================= */
 function bootApp() {
+  applySetupFromHash();   // 설정 링크(#setup=...)로 들어왔으면 자동 연결
   buildNav();
   initMonthFilter();
   // 대시보드를 히스토리 기준점으로 설정 (이후 다른 페이지에서 뒤로가기 시 대시보드로 복귀)
@@ -3416,6 +3430,48 @@ function genSyncCode() {
   let c = 'home-';
   for (let i=0;i<10;i++) c += s[Math.floor(Math.random()*s.length)];
   const el = document.getElementById('sync-code'); if (el) el.value = c;
+}
+
+/* ---------- 설정 링크/코드 (다른 기기 1번에 연결) ---------- */
+// URL·키·코드를 한 문자열로 인코딩
+function setupPayload() {
+  return btoa(encodeURIComponent(JSON.stringify({ u:syncCfg.url, k:syncCfg.key, c:syncCfg.code })));
+}
+// 설정 링크 복사
+function copySetupLink() {
+  if (!syncCfg.url || !syncCfg.key || !syncCfg.code) return toast('먼저 URL·키·가족코드를 저장해 주세요');
+  const link = location.origin + location.pathname + '#setup=' + setupPayload();
+  copyToClipboard(link);
+}
+// 붙여넣은 링크/코드로 설정 적용 후 연결
+function applySetupCode() {
+  const raw = (document.getElementById('sync-setupcode').value || '').trim();
+  if (!raw) return toast('설정 링크나 코드를 붙여넣어 주세요');
+  let payload = raw;
+  const m = raw.match(/setup=([^&\s]+)/);
+  if (m) payload = m[1];
+  try {
+    const cfg = JSON.parse(decodeURIComponent(atob(payload)));
+    if (!cfg.u || !cfg.k || !cfg.c) throw 0;
+    syncCfg.url = cfg.u; syncCfg.key = cfg.k; syncCfg.code = cfg.c; syncCfg.enabled = true;
+    saveSyncCfg();
+    renderSettings();
+    if (initSupabase()) { subscribeRealtime(); cloudPull(true, true); toast('설정을 불러와 연결했어요 ☁️'); }
+  } catch(e) { toast('설정 코드가 올바르지 않아요 😢'); }
+}
+// 주소(#setup=...)로 들어오면 자동 적용 (다른 기기에서 링크만 열면 연결)
+function applySetupFromHash() {
+  const m = (location.hash || '').match(/setup=([^&]+)/);
+  if (!m) return;
+  try {
+    const cfg = JSON.parse(decodeURIComponent(atob(m[1])));
+    if (cfg.u && cfg.k && cfg.c) {
+      syncCfg.url = cfg.u; syncCfg.key = cfg.k; syncCfg.code = cfg.c; syncCfg.enabled = true;
+      saveSyncCfg();
+      toast('동기화 설정을 자동으로 불러왔어요 ☁️');
+    }
+  } catch(e) {}
+  history.replaceState(null, '', location.pathname + location.search);  // 주소에서 설정 부분 제거
 }
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
