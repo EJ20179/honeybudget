@@ -228,6 +228,12 @@ input, select, textarea { font-family: inherit; }
   box-shadow: 0 0 0 3px var(--coral-soft);
 }
 .field textarea { resize: vertical; min-height: 40px; }
+/* 날짜·시간 입력칸: iOS 기본 스타일 제거(가운데정렬·폭고정 방지) → 일반 칸처럼 왼쪽정렬·폭100% */
+.field input[type="date"], .field input[type="time"] {
+  -webkit-appearance: none; appearance: none;
+  text-align: left; box-sizing: border-box; min-width: 0; max-width: 100%;
+}
+.field input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 
 /* 테이블 */
 .table-wrap { overflow-x: auto; border-radius: var(--radius-sm); }
