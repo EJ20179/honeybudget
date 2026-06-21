@@ -2093,13 +2093,19 @@ function toggleFixedPaid(id) {
     db.expenses = db.expenses.filter(e => !(e.fixedId===id && inMonth(e.date, ym)));
     save(); toast('이번 달 지출 체크를 해제했어요'); renderExpense();
   } else {
+    // 이번 달 실제 금액 입력 (전기·통신 등 변동 고정비 대응 · 기본값=등록 금액)
+    const input = prompt(`"${f.name||f.category}" 이번 달(${ym}) 실제 금액을 입력하세요`, num(f.amount).toLocaleString('ko-KR'));
+    if (input === null) return;                 // 취소
+    const amt = num(input);
+    if (amt <= 0) return toast('금액을 확인해 주세요 🙏');
+    const note = (f.name ? f.name+' ' : '') + '(고정지출)' + (amt !== num(f.amount) ? ' · 변동' : '');
     db.expenses.push({
       id:uid(), date: fixedDate(ym, f.day),
       kind: f.kind, category: f.category, payment: f.payment,
-      amount: num(f.amount), memo: (f.name ? f.name+' ' : '') + '(고정지출)',
+      amount: amt, memo: note,
       fixedId: id
     });
-    save(); toast('이번 달 지출로 기록했어요 ✓'); renderExpense();
+    save(); toast('이번 달 지출로 기록했어요 ✓ '+won(amt)); renderExpense();
   }
 }
 
@@ -3971,7 +3977,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r40';
+const APP_VERSION = '2026.06.21-r41';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
