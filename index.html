@@ -3071,7 +3071,7 @@ function renderSettings() {
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
         <button class="btn btn-soft btn-sm" onclick="cloudPushNow(true)">⬆️ 지금 올리기</button>
-        <button class="btn btn-soft btn-sm" onclick="cloudPull(true)">⬇️ 지금 받기</button>
+        <button class="btn btn-soft btn-sm" onclick="cloudPull(true, true)">⬇️ 지금 받기</button>
       </div>
       <div id="syncStatus" class="sync-status ${syncReady?'ok':''}" style="margin-top:10px">${syncReady?'동기화 연결됨 ✓':'동기화 꺼짐 (설정 후 켜기)'}</div>
 
@@ -3296,24 +3296,23 @@ function startSync() {
 }
 
 // 클라우드 → 로컬 (받기)
-async function cloudPull(showToast) {
+// force=true(수동 받기): 시각 비교 없이 무조건 클라우드 내용으로 덮어쓰기
+async function cloudPull(showToast, force) {
   if (!syncReady) { if(showToast) toast('먼저 동기화를 설정해 주세요'); return; }
   lastPull = Date.now();
   try {
     const { data, error } = await sb.from('households').select('data, updated_at').eq('code', syncCfg.code.trim()).maybeSingle();
     if (error) { syncStatus('받기 실패: ' + error.message, 'err'); return; }
-    if (!data) { syncStatus('클라우드에 아직 데이터가 없어요. "지금 올리기"로 먼저 올려주세요.', 'warn'); return; }
+    if (!data) { syncStatus('클라우드에 아직 데이터가 없어요. 다른 기기에서 "지금 올리기"를 먼저 해주세요.', 'warn'); if(showToast) toast('클라우드에 데이터가 없어요'); return; }
     const remoteTs = new Date(data.updated_at || 0).getTime();
     const localTs = db._updatedAt || 0;
-    if (remoteTs >= localTs) {
+    if (force || remoteTs >= localTs) {
       applyingRemote = true;
       db = data.data || {};
       const def = emptyDB();
-      for (const k in def) if (!(k in db)) db[k] = def[k];
+      for (const k in def) if (!(k in db)) db[k] = def[k];                 // 누락 항목 보강
       if (!db.settings) db.settings = def.settings;
-      if (!db.settings.dashWidgets) db.settings.dashWidgets = {};
-      if (!db.settings.dashOrder) db.settings.dashOrder = [];
-      if (!db.memos) db.memos = [];
+      for (const k in def.settings) if (!(k in db.settings)) db.settings[k] = def.settings[k];
       db._updatedAt = remoteTs;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
       applyingRemote = false;
@@ -3321,8 +3320,8 @@ async function cloudPull(showToast) {
       syncStatus('최신 데이터를 받았어요 ✓ ' + new Date(remoteTs).toLocaleString('ko-KR'), 'ok');
       if (showToast) toast('동기화 완료 (받기) ☁️⬇️');
     } else {
-      syncStatus('이 기기 데이터가 더 최신이에요. "지금 올리기"를 해주세요.', 'warn');
-      if (showToast) toast('이 기기가 더 최신이에요 — 올리기를 해주세요');
+      syncStatus('이 기기 데이터가 더 최신이에요. 클라우드 내용을 가져오려면 다시 "지금 받기"를 누르세요.', 'warn');
+      if (showToast) toast('이 기기가 더 최신이에요 — 한 번 더 누르면 클라우드 내용을 받아와요');
     }
   } catch(e) { syncStatus('받기 오류: ' + e.message, 'err'); }
 }
