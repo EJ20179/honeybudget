@@ -430,7 +430,12 @@ tr:hover td { background: var(--cream); }
 .memoboard-cal, .memoboard-memo { min-width: 0; }
 /* 메모 보관함 토글 */
 .memo-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; background: var(--cream-2); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 700; color: var(--brown-deep); margin-bottom: 12px; }
+.memo-toggle { margin-top: 14px; }
 .memo-toggle .mt-arrow { margin-left: auto; font-size: 12px; color: var(--text-soft); font-weight: 600; }
+.memo-arch-list { display: flex; flex-direction: column; gap: 7px; margin-top: 8px; }
+.memo-arch { display: flex; align-items: center; gap: 8px; background: var(--cream); border-radius: 10px; padding: 8px 10px; }
+.memo-arch-text { flex: 1; min-width: 0; font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memo-arch-meta { font-size: 11px; color: var(--text-soft); margin-top: 2px; white-space: nowrap; }
 .memoboard-cal-h { font-size: 13px; font-weight: 700; color: var(--brown-deep); margin-bottom: 8px; }
 .memoboard-cal-h span { font-size: 11px; color: var(--text-soft); font-weight: 600; }
 @media (max-width: 760px) { .memoboard { grid-template-columns: 1fr; gap: 16px; } }
@@ -1478,45 +1483,30 @@ function renderDashboard() {
         ${calendarHTML(ym, 'calDayGoSchedule')}
       </div>
       <div class="memoboard-memo">
-    <div class="memo-toggle" onclick="toggleMemoBox()">📦 메모 보관함 <span style="color:var(--coral-deep)">${db.memos.length}개</span><span class="mt-arrow">${memoBoxOpen?'▲ 접기':'▼ 펼치기'}</span></div>
-    ${memoBoxOpen ? `
     <div class="memo-add">
       <select id="dash-memo-author" title="작성자">${PEOPLE.map(p=>`<option ${p===currentUser()?'selected':''}>${p}</option>`).join('')}</select>
       <input type="text" id="dash-memo-input" placeholder="메모를 적고 Enter (예: 주말 장보기, 관리비)" onkeydown="if(event.key==='Enter'){event.preventDefault();addMemo();}">
       <button class="btn btn-primary btn-sm" onclick="addMemo()">＋ 추가</button>
-    </div>` : ''}
-    ${memoBoxOpen ? (db.memos.length ? `<div class="memo-grid">${
-      db.memos.slice().reverse().map((m,i)=>{
-        const comments = m.comments || [];
-        return `<div class="memo-note" style="background:${memoColors[i%memoColors.length]}">
-        <div class="memo-text">${esc(m.text)}</div>
-        <div class="memo-meta"><span>${m.author?`<span class="ca ${personTag(m.author)}">${m.author}</span> `:''}🗓️ ${m.date}</span>
-          <span class="memo-actions">
-            <button onclick="editMemo('${m.id}')" title="수정">✏️</button>
-            <button onclick="delMemo('${m.id}')" title="삭제">✕</button>
-          </span>
-        </div>
-        ${reactionBar(m.reactions, `reactMemo('${m.id}',`)}
-        <div class="memo-comments">
-          ${comments.length ? comments.map(c=>`
-            <div class="memo-comment">
-              <div class="cc-top">
-                <span class="ca ${personTag(c.author)}">${c.author}</span>
-                <span class="ct">${esc(c.text)}</span>
-                <button class="cx" onclick="delComment('${m.id}','${c.id}')" title="댓글 삭제">✕</button>
-              </div>
-              ${reactionBar(c.reactions, `reactComment('${m.id}','${c.id}',`, 'sm')}
-            </div>`).join('')
-          : `<div class="memo-nocomment">💬 첫 댓글을 남겨보세요</div>`}
-          <div class="memo-comment-add">
-            <select id="cm-author-${m.id}">${PEOPLE.map(p=>`<option ${p===currentUser()?'selected':''}>${p}</option>`).join('')}</select>
-            <input type="text" id="cm-input-${m.id}" placeholder="댓글 달기…" onkeydown="if(event.key==='Enter'){event.preventDefault();addComment('${m.id}');}">
-            <button onclick="addComment('${m.id}')" title="댓글 등록">＋</button>
-          </div>
-        </div>
-      </div>`;
-      }).join('')
-    }</div>` : emptyBox('아직 메모가 없어요','위에 적고 추가하면 부부가 함께 보는 메모가 돼요')) : ''}
+    </div>
+    ${(() => {
+      const active = db.memos.filter(m=>!m.archived);
+      const archived = db.memos.filter(m=>m.archived);
+      let h = active.length
+        ? `<div class="memo-grid">${active.slice().reverse().map((m,i)=>memoNoteHTML(m,i)).join('')}</div>`
+        : emptyBox('보이는 메모가 없어요','메모를 추가하거나 보관함에서 꺼내보세요');
+      h += `<div class="memo-toggle" onclick="toggleMemoArchive()">📦 보관함 <span style="color:var(--coral-deep)">${archived.length}개</span><span class="mt-arrow">${memoArchiveOpen?'▲ 접기':'▼ 펼치기'}</span></div>`;
+      if (memoArchiveOpen) {
+        h += archived.length
+          ? `<div class="memo-arch-list">${archived.slice().reverse().map(m=>`
+              <div class="memo-arch">
+                <div class="memo-arch-text">${esc(m.text)}<div class="memo-arch-meta">${m.author?esc(m.author)+' · ':''}${m.date}${(m.comments&&m.comments.length)?' · 💬'+m.comments.length:''}</div></div>
+                <button class="icon-btn" onclick="restoreMemo('${m.id}')" title="다시 보이기">↩️</button>
+                <button class="icon-btn del" onclick="delMemo('${m.id}')" title="삭제">🗑️</button>
+              </div>`).join('')}</div>`
+          : `<div class="memo-nocomment" style="padding:4px 2px">보관한 메모가 없어요. 메모의 📦 버튼으로 보관하세요</div>`;
+      }
+      return h;
+    })()}
       </div>
     </div>
   </div>`;
@@ -1651,8 +1641,43 @@ function pairHTML(a, b) {
 }
 
 /* ---------- 우리집 메모판 ---------- */
-let memoBoxOpen = true;   // 메모 보관함 펼침 여부
-function toggleMemoBox() { memoBoxOpen = !memoBoxOpen; renderDashboard(); }
+const MEMO_COLORS = ['#fff6e3','#fdeae2','#e9f4ee','#eaeefa','#fbe9f1'];
+let memoArchiveOpen = false;   // 보관함 펼침 여부
+function toggleMemoArchive() { memoArchiveOpen = !memoArchiveOpen; renderDashboard(); }
+function archiveMemo(id) { const m=db.memos.find(x=>x.id===id); if(!m) return; m.archived=true; save(); toast('메모를 보관함에 넣었어요 📦'); renderDashboard(); }
+function restoreMemo(id) { const m=db.memos.find(x=>x.id===id); if(!m) return; m.archived=false; save(); toast('메모를 다시 꺼냈어요 ↩️'); renderDashboard(); }
+// 메모 카드 1개 HTML
+function memoNoteHTML(m, i) {
+  const comments = m.comments || [];
+  return `<div class="memo-note" style="background:${MEMO_COLORS[i%MEMO_COLORS.length]}">
+    <div class="memo-text">${esc(m.text)}</div>
+    <div class="memo-meta"><span>${m.author?`<span class="ca ${personTag(m.author)}">${m.author}</span> `:''}🗓️ ${m.date}</span>
+      <span class="memo-actions">
+        <button onclick="archiveMemo('${m.id}')" title="보관(숨기기)">📦</button>
+        <button onclick="editMemo('${m.id}')" title="수정">✏️</button>
+        <button onclick="delMemo('${m.id}')" title="삭제">✕</button>
+      </span>
+    </div>
+    ${reactionBar(m.reactions, `reactMemo('${m.id}',`)}
+    <div class="memo-comments">
+      ${comments.length ? comments.map(c=>`
+        <div class="memo-comment">
+          <div class="cc-top">
+            <span class="ca ${personTag(c.author)}">${c.author}</span>
+            <span class="ct">${esc(c.text)}</span>
+            <button class="cx" onclick="delComment('${m.id}','${c.id}')" title="댓글 삭제">✕</button>
+          </div>
+          ${reactionBar(c.reactions, `reactComment('${m.id}','${c.id}',`, 'sm')}
+        </div>`).join('')
+      : `<div class="memo-nocomment">💬 첫 댓글을 남겨보세요</div>`}
+      <div class="memo-comment-add">
+        <select id="cm-author-${m.id}">${PEOPLE.map(p=>`<option ${p===currentUser()?'selected':''}>${p}</option>`).join('')}</select>
+        <input type="text" id="cm-input-${m.id}" placeholder="댓글 달기…" onkeydown="if(event.key==='Enter'){event.preventDefault();addComment('${m.id}');}">
+        <button onclick="addComment('${m.id}')" title="댓글 등록">＋</button>
+      </div>
+    </div>
+  </div>`;
+}
 function addMemo() {
   const el = document.getElementById('dash-memo-input');
   const t = (el && el.value || '').trim();
@@ -3878,7 +3903,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r34';
+const APP_VERSION = '2026.06.21-r35';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
