@@ -656,6 +656,18 @@ html, body { max-width: 100%; overflow-x: hidden; }
   </div>
 </div>
 
+<!-- 일정 수정 모달 -->
+<div class="modal-bg" id="schedModalBg">
+  <div class="modal" style="max-width:500px;text-align:left;max-height:88vh;overflow-y:auto">
+    <h3 style="margin-bottom:14px">📆 일정 수정</h3>
+    <div id="schedModalFields" class="form-grid"></div>
+    <div class="modal-actions" style="margin-top:20px">
+      <button class="btn btn-soft" onclick="closeSchedModal()">취소</button>
+      <button class="btn btn-primary" onclick="saveSchedEdit()">💾 저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- 내역 수정 모달 -->
 <div class="modal-bg" id="editModalBg">
   <div class="modal" style="max-width:480px;text-align:left;max-height:88vh;overflow-y:auto">
@@ -3115,26 +3127,66 @@ function addSchedule() {
   db.schedules.push(rec);
   save(); toast('일정을 추가했어요 📆'); renderSchedule();
 }
+// 일정 모달 편집 (그 자리 수정)
+let schedEditId = null;
 function editSchedule(id) {
   const ev = db.schedules.find(x=>x.id===id); if(!ev) return;
-  schedFormGroup = evGroup(ev);
-  document.getElementById('sc-date').value=ev.date;
-  document.getElementById('sc-enddate').value=ev.endDate||'';
-  document.getElementById('sc-start').value=ev.startTime||'';
-  document.getElementById('sc-end').value=ev.endTime||'';
-  document.getElementById('sc-group').value=schedFormGroup;
-  document.getElementById('sc-cat').innerHTML = schedCatOptions(schedFormGroup, ev.category);
-  document.getElementById('sc-person-field').style.display = (schedFormGroup==='개인'||schedFormGroup==='근무') ? '' : 'none';
-  document.getElementById('sc-person').value = ev.person || currentUser();
-  document.getElementById('sc-repeat').value=ev.repeat;
-  document.getElementById('sc-monthday').value=ev.monthDay||'';
-  if (ev.weekday!=null) document.getElementById('sc-weekday').value=ev.weekday;
-  if (ev.yearMode) document.getElementById('sc-yearmode').value=ev.yearMode;
-  onRepeatChange();
-  document.getElementById('sc-title').value=ev.title;
-  document.getElementById('sc-memo').value=ev.memo||'';
-  db.schedules = db.schedules.filter(x=>x.id!==id); save();
-  window.scrollTo({top:0,behavior:'smooth'}); toast('수정 후 다시 추가해 주세요 ✏️'); renderSchedule();
+  schedEditId = id;
+  const g = evGroup(ev);
+  const wd = num(ev.weekday);
+  document.getElementById('schedModalFields').innerHTML = `
+    <div class="field"><label>시작일</label><input type="date" id="es-date" value="${ev.date||''}"></div>
+    <div class="field"><label>종료일 <span style="color:var(--text-soft)">(선택)</span></label><input type="date" id="es-enddate" value="${ev.endDate||''}"></div>
+    <div class="field"><label>시작 시간 <span style="color:var(--text-soft)">(선택)</span></label><input type="time" id="es-start" value="${ev.startTime||''}"></div>
+    <div class="field"><label>종료 시간 <span style="color:var(--text-soft)">(선택)</span></label><input type="time" id="es-end" value="${ev.endTime||''}"></div>
+    <div class="field"><label>분류</label><select id="es-group" onchange="esGroupChange()">${SCHEDULE_GROUPS.map(x=>`<option ${x===g?'selected':''}>${x}</option>`).join('')}</select></div>
+    <div class="field" id="es-person-field" style="display:${(g==='개인'||g==='근무')?'':'none'}"><label>누구</label><select id="es-person">${PEOPLE.map(p=>`<option ${p===(ev.person||currentUser())?'selected':''}>${p}</option>`).join('')}</select></div>
+    <div class="field"><label>종류</label><select id="es-cat">${schedCatOptions(g, ev.category)}</select></div>
+    <div class="field"><label>반복</label><select id="es-repeat" onchange="esRepeatChange()">${SCHEDULE_REPEAT.map(r=>`<option ${r===ev.repeat?'selected':''}>${r}</option>`).join('')}</select></div>
+    <div class="field" id="es-monthday-field" style="display:${ev.repeat==='매월 반복'?'':'none'}"><label>매월 며칠</label><select id="es-monthday"><option value="">시작일 기준</option>${Array.from({length:31},(_,i)=>`<option value="${i+1}" ${String(i+1)===String(ev.monthDay)?'selected':''}>${i+1}일</option>`).join('')}<option value="last" ${ev.monthDay==='last'?'selected':''}>말일</option></select></div>
+    <div class="field" id="es-weekday-field" style="display:${(ev.repeat==='매주'||ev.repeat==='격주')?'':'none'}"><label>무슨 요일</label><select id="es-weekday">${WEEKDAYS.map((w,i)=>`<option value="${i}" ${i===wd?'selected':''}>${w}요일</option>`).join('')}</select></div>
+    <div class="field" id="es-yearmode-field" style="display:${ev.repeat==='매년'?'':'none'}"><label>양력/음력</label><select id="es-yearmode"><option ${ev.yearMode!=='음력'?'selected':''}>양력</option><option ${ev.yearMode==='음력'?'selected':''}>음력</option></select></div>
+    <div class="field" style="grid-column:span 2"><label>제목</label><input type="text" id="es-title" value="${esc(ev.title||'')}"></div>
+    <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="es-memo" value="${esc(ev.memo||'')}"></div>`;
+  document.getElementById('schedModalBg').classList.add('show');
+}
+function esGroupChange() {
+  const g = document.getElementById('es-group').value;
+  document.getElementById('es-cat').innerHTML = schedCatOptions(g);
+  document.getElementById('es-person-field').style.display = (g==='개인'||g==='근무') ? '' : 'none';
+}
+function esRepeatChange() {
+  const r = document.getElementById('es-repeat').value;
+  document.getElementById('es-monthday-field').style.display = (r==='매월 반복') ? '' : 'none';
+  document.getElementById('es-weekday-field').style.display = (r==='매주'||r==='격주') ? '' : 'none';
+  document.getElementById('es-yearmode-field').style.display = (r==='매년') ? '' : 'none';
+}
+function closeSchedModal() { schedEditId=null; document.getElementById('schedModalBg').classList.remove('show'); }
+function saveSchedEdit() {
+  const ev = db.schedules.find(x=>x.id===schedEditId); if(!ev){ closeSchedModal(); return; }
+  let sd = document.getElementById('es-date').value || today();
+  let ed = document.getElementById('es-enddate').value || '';
+  if (ed && ed < sd) { const t=sd; sd=ed; ed=t; }
+  const repeat = document.getElementById('es-repeat').value;
+  const g = document.getElementById('es-group').value;
+  ev.date=sd; ev.endDate=ed;
+  ev.startTime=document.getElementById('es-start').value||'';
+  ev.endTime=document.getElementById('es-end').value||'';
+  ev.group=g;
+  ev.person=(g==='개인'||g==='근무')?document.getElementById('es-person').value:'';
+  ev.category=document.getElementById('es-cat').value;
+  ev.repeat=repeat;
+  ev.monthDay=document.getElementById('es-monthday').value||'';
+  ev.weekday=(repeat==='매주'||repeat==='격주')?num(document.getElementById('es-weekday').value):undefined;
+  ev.yearMode=(repeat==='매년')?document.getElementById('es-yearmode').value:undefined;
+  ev.title=document.getElementById('es-title').value.trim()||ev.category;
+  ev.memo=document.getElementById('es-memo').value.trim();
+  if (repeat==='매주'||repeat==='격주') ev.date = fmtDate(firstWeekday(parseYMD(sd), ev.weekday));
+  if (repeat==='매년' && ev.yearMode==='음력') {
+    const l = solarToLunar(parseYMD(ev.date));
+    if (l) { ev.lunarM=l.m; ev.lunarD=l.d; } else { ev.yearMode='양력'; toast('이 기기는 음력 변환을 지원하지 않아 양력으로 저장했어요'); }
+  }
+  save(); closeSchedModal(); toast('일정을 수정했어요 ✏️'); renderSchedule();
 }
 // 다가오는 일정을 공유용 텍스트로 만들어 클립보드에 복사
 function shareSchedule() {
@@ -3819,7 +3871,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r32';
+const APP_VERSION = '2026.06.21-r33';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
