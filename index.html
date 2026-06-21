@@ -1242,7 +1242,8 @@ function sumExpense(ym, kind) {
 }
 // 선택월 저축 합계
 function sumSaving(ym) {
-  return db.savings.filter(s => inMonth(s.date, ym)).reduce((a,s)=>a+num(s.amount),0);
+  // 이월(기초) 저축은 이번 달 저축액에서 제외
+  return db.savings.filter(s => inMonth(s.date, ym) && !s.opening).reduce((a,s)=>a+num(s.amount),0);
 }
 // 선택월 카테고리별 지출
 function sumByCategory(ym) {
@@ -2280,6 +2281,11 @@ function renderSaving() {
         <div class="field"><label>금액(원)</label><input type="text" inputmode="numeric" id="sv-amount" placeholder="0" oninput="commaFormat(this)"></div>
         <div class="field"><label>목표 금액(원)</label><input type="text" inputmode="numeric" id="sv-goal" placeholder="0" oninput="commaFormat(this)"></div>
         <div class="field"><label>만기일 <span style="color:var(--text-soft)">(선택·적금)</span></label><input type="date" id="sv-maturity"></div>
+        <div class="field"><label>구분</label>
+          <label style="display:flex;align-items:center;gap:7px;padding:9px 0;font-size:13px;color:var(--brown);font-weight:600">
+            <input type="checkbox" id="sv-opening" style="width:16px;height:16px;accent-color:var(--coral-deep)"> 기존에 모아둔 금액(이월)
+          </label>
+        </div>
         <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="sv-memo" placeholder="예: 주택청약+적금"></div>
         <div class="field"><label>&nbsp;</label><button class="btn btn-primary" onclick="addSaving()">＋ 추가하기</button></div>
       </div>
@@ -2304,7 +2310,7 @@ function renderSaving() {
         <tbody>${list.map(s=>`
           <tr>
             <td>${s.date}</td>
-            <td>${s.purpose}</td>
+            <td>${s.purpose}${s.opening?' <span class="tag" style="background:var(--cream-2);color:var(--text-soft)">기초·이월</span>':''}</td>
             <td style="text-align:right" class="num in">${won(s.amount)}</td>
             <td style="text-align:right">${num(s.goal)>0?won(s.goal):'-'}</td>
             <td style="font-size:12px;color:var(--text-soft)">${s.maturity?`⏳ ${s.maturity}<br><span style="font-size:11px">${dday(parseYMD(s.maturity)).txt}</span>`:'-'}</td>
@@ -2326,6 +2332,7 @@ function addSaving() {
     purpose: document.getElementById('sv-purpose').value,
     amount, goal: num(document.getElementById('sv-goal').value),
     maturity: document.getElementById('sv-maturity').value || '',
+    opening: document.getElementById('sv-opening').checked,   // 기존(이월) 저축 여부
     memo: document.getElementById('sv-memo').value.trim()
   });
   save(); toast('저축을 저장했어요 🐷'); renderSaving();
@@ -3903,7 +3910,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r35';
+const APP_VERSION = '2026.06.21-r36';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
