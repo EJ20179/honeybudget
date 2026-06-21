@@ -330,22 +330,23 @@ tr:hover td { background: var(--cream); }
 .empty .hint { display: none; }
 
 /* 월 달력 */
-.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.cal-head { text-align: center; font-size: 11.5px; font-weight: 800; color: var(--text-soft); padding: 4px 0 6px; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; min-width: 0; }
+.cal-head { text-align: center; font-size: 11.5px; font-weight: 800; color: var(--text-soft); padding: 4px 0 6px; min-width: 0; overflow: hidden; }
 .cal-head.sun { color: #e0524a; } .cal-head.sat { color: #3f6fc4; }
-.cal-day { min-height: 70px; background: var(--cream); border-radius: 10px; padding: 4px 4px 5px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; overflow: hidden; transition: .1s; }
+.cal-day { min-width: 0; min-height: 70px; background: var(--cream); border-radius: 10px; padding: 4px 4px 5px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; overflow: hidden; transition: .1s; }
 .cal-day:hover { background: var(--beige); }
 .cal-day.empty { background: transparent; cursor: default; }
-.cal-day.today { outline: 2px solid var(--coral); }
+.cal-day.today { outline: 2px solid var(--coral); outline-offset: -2px; }
 .cal-num { font-size: 12.5px; font-weight: 700; color: #333; }
 .cal-num.sun { color: #e0524a; } .cal-num.sat { color: #3f6fc4; }
-.cal-ev { font-size: 9.5px; line-height: 1.35; border-radius: 4px; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.cal-ev { font-size: 9.5px; line-height: 1.35; border-radius: 4px; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; min-width: 0; max-width: 100%; }
 .cal-more { font-size: 9px; color: var(--text-soft); padding-left: 3px; }
-@media (max-width: 520px) {
+@media (max-width: 760px) {
   .cal { gap: 3px; }
-  .cal-day { min-height: 56px; border-radius: 8px; padding: 3px; }
+  .cal-day { min-height: 52px; border-radius: 8px; padding: 3px 2px; }
   .cal-num { font-size: 11px; }
-  .cal-ev { font-size: 8px; padding: 0 3px; }
+  .cal-ev { font-size: 8px; padding: 0 2px; border-radius: 3px; }
+  .cal-head { font-size: 10px; }
 }
 
 /* 일정 목록 */
@@ -426,6 +427,7 @@ tr:hover td { background: var(--cream); }
 
 /* 메모판 2단 (왼쪽 달력 / 오른쪽 메모) */
 .memoboard { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 18px; align-items: start; }
+.memoboard-cal, .memoboard-memo { min-width: 0; }
 .memoboard-cal-h { font-size: 13px; font-weight: 700; color: var(--brown-deep); margin-bottom: 8px; }
 .memoboard-cal-h span { font-size: 11px; color: var(--text-soft); font-weight: 600; }
 @media (max-width: 760px) { .memoboard { grid-template-columns: 1fr; gap: 16px; } }
@@ -703,14 +705,14 @@ const SCHEDULE_GROUPS = ['재정','개인','근무','가족'];
 const GROUP_CATS = {
   '재정': ['급여일','카드값','대출상환','적금·저축','공과금','보험료','기타'],
   '개인': ['약속','병원','운동','자기계발','미용','할 일','기타'],
-  '근무': ['연차','반차','대체휴무','당직','출장','회식','출근','기타'],
+  '근무': ['연차','반차','대체휴무','당직','출장','교육','회식','출근','기타'],
   '가족': ['가족모임','생일','기념일','경조사','여행','외식','육아','기타'],
 };
 // 카테고리별 이모지
 const SCHED_ICON = {
   '급여일':'💰','카드값':'💳','대출상환':'🏦','적금·저축':'🐷','공과금':'🧾','보험료':'🛡️',
   '약속':'🤝','병원':'🏥','운동':'💪','자기계발':'📚','미용':'💇','할 일':'✅',
-  '연차':'🏖️','반차':'🌤️','대체휴무':'😌','당직':'🌙','출장':'🧳','회식':'🍻','출근':'🏢',
+  '연차':'🏖️','반차':'🌤️','대체휴무':'😌','당직':'🌙','출장':'🧳','교육':'📖','회식':'🍻','출근':'🏢',
   '가족모임':'👨‍👩‍👧','생일':'🎂','기념일':'💕','경조사':'💐','여행':'✈️','외식':'🍽️','육아':'🍼',
   '기타':'📌'
 };
@@ -3732,7 +3734,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r29';
+const APP_VERSION = '2026.06.21-r30';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
