@@ -325,6 +325,9 @@ tr:hover td { background: var(--cream); }
 .guide-list .step { background: var(--coral-soft); color: var(--coral-deep); font-weight: 800; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px; }
 
 .hint-box { background: var(--mint-soft); border-radius: 12px; padding: 12px 15px; font-size: 13px; color: #5a8a6e; display: flex; gap: 9px; align-items: flex-start; margin-bottom: 16px; }
+/* 💡 안내(힌트) 박스 숨김 — 둘이서만 쓰므로 깔끔하게 (단, 대출 계산결과 #ln-calc 는 기능이라 유지) */
+.hint-box:not(#ln-calc) { display: none; }
+.empty .hint { display: none; }
 
 /* 일정 목록 */
 .sched-list { display: flex; flex-direction: column; gap: 9px; }
