@@ -711,7 +711,7 @@ const INCOME_TYPES = ['월급', '상여', '부수입', '기타'];
 const EXPENSE_KINDS = ['공동지출', '아내 개별지출', '남편 개별지출'];
 const EXPENSE_CATS = ['식비','교통','통신','보험','병원','쇼핑','경조사','데이트','가전가구','여행','대출상환','저축','카드값','현금','기타'];
 // 일부 카테고리의 세부 항목 (선택 시 세부 선택칸 표시)
-const EXPENSE_SUBCATS = { '대출상환':['이자','원금','원리금'], '저축':['비상금','집 장만','임신·육아','여행','가전가구','적금','기타'] };
+const EXPENSE_SUBCATS = { '대출상환':['원금','이자'], '저축':['비상금','집 장만','임신·육아','여행','가전가구','적금','기타'] };
 const PAY_METHODS = ['생활비통장','신용카드','체크카드','현금','계좌이체','기타'];
 // 결제수단별 색상/순서 (대시보드 비율 표시)
 const PAY_COLORS = { '신용카드':'var(--coral)', '체크카드':'var(--mint)', '현금':'#b89a82', '계좌이체':'#8fb8d8', '생활비통장':'var(--beige-deep)', '기타':'#bba99a' };
@@ -1239,6 +1239,14 @@ function cumulativeBalance(ym) {
 }
 // 저축 방향: 찾기(인출)=-1, 입금=+1
 function savingSign(s) { return s.dir === 'out' ? -1 : 1; }
+// 목적별 저축 합계 (저축 관리 + 지출관리의 '저축' 카테고리 통합) → 목표 진행률용
+function savedByPurpose() {
+  const map = {};
+  const add = (p, amt, goal) => { if(!map[p]) map[p]={sum:0,goal:0}; map[p].sum += amt; if(goal>0) map[p].goal = goal; };
+  db.savings.forEach(s => add(s.purpose, savingSign(s)*num(s.amount), num(s.goal)));
+  db.expenses.forEach(e => { if (e.category==='저축' && e.sub && counted(e)) add(e.sub, num(e.amount), 0); });
+  return map;
+}
 // 실제 지출(현금흐름)로 잡히는지 — 미결제 신용카드는 '결제 예정'이라 제외
 function counted(e) { return e.payment !== '신용카드' || e.paid === true; }
 // 선택월 지출 합계 (구분별 필터 가능 · 결제완료분만)
@@ -1319,7 +1327,7 @@ function renderDashboard() {
   const loanInitial = db.loans.reduce((s,l)=>s+num(l.initial),0);
 
   // 비상금(저축 목적) 합계
-  const emergency = db.savings.filter(s=>s.purpose==='비상금').reduce((a,s)=>a+num(s.amount),0);
+  const emergency = (savedByPurpose()['비상금']||{}).sum || 0;
   // 생활비 통장 잔액 (전체 누적)
   const acBalance = accountBalance();
   // 투자 자산 (저축의 일환) — 평가금액·평가손익
@@ -1887,6 +1895,7 @@ function renderExpense() {
         <div class="field"><label>지출 구분</label><select id="exp-kind">${EXPENSE_KINDS.map(k=>`<option>${k}</option>`).join('')}</select></div>
         <div class="field"><label>카테고리</label><select id="exp-cat" onchange="onExpCatChange()">${EXPENSE_CATS.map(c=>`<option>${c}</option>`).join('')}</select></div>
         <div class="field" id="exp-sub-field" style="display:none"><label>세부</label><select id="exp-sub"></select></div>
+        <div class="field" id="exp-loan-field" style="display:none"><label>어느 대출</label><select id="exp-loan">${db.loans.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>
         <div class="field"><label>결제수단</label><select id="exp-pay">${PAY_METHODS.map(p=>`<option>${p}</option>`).join('')}</select></div>
         <div class="field"><label>금액(원)</label><input type="text" inputmode="numeric" id="exp-amount" placeholder="0" oninput="commaFormat(this)"></div>
         <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="exp-memo" placeholder="예: 장보기·외식"></div>
@@ -1986,17 +1995,29 @@ function addExpense() {
   const payment = document.getElementById('exp-pay').value;
   const cat = document.getElementById('exp-cat').value;
   const subEl = document.getElementById('exp-sub');
-  db.expenses.push({
+  const sub = (EXPENSE_SUBCATS[cat] && subEl) ? subEl.value : '';
+  const e = {
     id:uid(),
     date: document.getElementById('exp-date').value || today(),
     kind: document.getElementById('exp-kind').value,
-    category: cat,
-    sub: (EXPENSE_SUBCATS[cat] && subEl) ? subEl.value : '',   // 대출상환→이자/원금, 저축→목적
+    category: cat, sub,
     payment,
     paid: payment==='신용카드' ? false : true,   // 신용카드는 '결제 예정'으로 시작
     amount, memo: document.getElementById('exp-memo').value.trim()
-  });
-  save(); toast(payment==='신용카드' ? '신용카드 결제 예정에 추가했어요 💳' : '지출을 저장했어요 ✨'); renderExpense();
+  };
+  // 대출상환·원금 → 선택한 대출 잔액 자동 감소 (이자는 잔액 영향 없음)
+  if (cat==='대출상환' && db.loans.length) {
+    const loanEl = document.getElementById('exp-loan');
+    const loan = db.loans.find(l=>l.id===(loanEl&&loanEl.value));
+    if (loan) {
+      e.loanId = loan.id;
+      if (sub==='원금') { loan.balance = Math.max(0, num(loan.balance)-amount); e.principalApplied = amount; }
+    }
+  }
+  db.expenses.push(e);
+  save();
+  toast(payment==='신용카드' ? '신용카드 결제 예정에 추가했어요 💳' : (cat==='대출상환'&&sub==='원금'?'지출 기록 + 대출 잔액 차감 ✓':(cat==='저축'?'지출 기록 + 저축 목표 반영 ✓':'지출을 저장했어요 ✨')));
+  renderExpense();
 }
 // 카테고리 선택 시 세부 항목 칸 표시/채움 (대출상환·저축)
 function onExpCatChange() {
@@ -2006,6 +2027,9 @@ function onExpCatChange() {
   const subs = EXPENSE_SUBCATS[cat];
   if (subs) { sel.innerHTML = subs.map(s=>`<option>${s}</option>`).join(''); field.style.display=''; }
   else { field.style.display='none'; }
+  // 대출상환이면 어느 대출인지 선택칸 표시
+  const loanField = document.getElementById('exp-loan-field');
+  if (loanField) loanField.style.display = (cat==='대출상환' && db.loans.length) ? '' : 'none';
 }
 function editExpense(id) { openEditModal('expenses', id); }
 // 신용카드 1건 결제 완료 → 결제일(오늘) 지출로 확정
@@ -2283,12 +2307,7 @@ function renderSaving() {
   const total = list.reduce((s,x)=>s+num(x.amount),0);
 
   // 목적별 누적 (전체 기간) + 목표 (최신 입력 기준)
-  const byPurpose = {};
-  db.savings.forEach(s => {
-    if (!byPurpose[s.purpose]) byPurpose[s.purpose] = { sum:0, goal:0 };
-    byPurpose[s.purpose].sum += savingSign(s) * num(s.amount);   // 입금+ / 인출-
-    if (num(s.goal) > 0) byPurpose[s.purpose].goal = num(s.goal);  // 가장 최근 목표 반영
-  });
+  const byPurpose = savedByPurpose();   // 저축 관리 + 지출관리 '저축' 통합
 
   document.getElementById('page-saving').innerHTML = `
     <div class="card">
@@ -3616,6 +3635,14 @@ function changePin() {
    ========================================================================= */
 function delItem(coll, id) {
   confirmModal('🗑️','이 내역을 삭제할까요?','삭제하면 되돌릴 수 없어요.', ()=>{
+    // 대출상환·원금 지출 삭제 시 대출 잔액 복구
+    if (coll==='expenses') {
+      const e = db.expenses.find(x=>x.id===id);
+      if (e && e.loanId && num(e.principalApplied)>0) {
+        const loan = db.loans.find(l=>l.id===e.loanId);
+        if (loan) loan.balance = num(loan.balance) + num(e.principalApplied);
+      }
+    }
     db[coll] = db[coll].filter(x=>x.id!==id);
     save(); toast('삭제했어요'); renderPage(currentPage);
   });
@@ -3944,7 +3971,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r38';
+const APP_VERSION = '2026.06.21-r39';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
