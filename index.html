@@ -335,7 +335,8 @@ tr:hover td { background: var(--cream); }
 .sync-status.err { background: #f3dcd4; color: var(--coral-deep); }
 
 /* 대시보드 위젯 그리드 (위치 변경) */
-.dash-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; }
+.dash-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; min-width: 0; }
+.dash-item { min-width: 0; }              /* 그리드 항목이 화면보다 좁게 줄어들 수 있도록 (넘침 방지) */
 .dash-item.full { grid-column: 1 / -1; }
 .dash-item.half { grid-column: span 1; }
 .dash-item.editing { outline: 2px dashed var(--coral); outline-offset: 3px; border-radius: 18px; cursor: grab; }
@@ -451,6 +452,10 @@ tr:hover td { background: var(--cream); }
 }
 /* 어떤 화면에서도 가로 스크롤(잘림) 방지 */
 html, body { max-width: 100%; overflow-x: hidden; }
+#app, .layout, .main { max-width: 100%; min-width: 0; }
+.main { overflow-x: hidden; }
+.card { min-width: 0; }                 /* 카드가 화면 폭에 맞춰 줄어들도록 */
+.memo-add input { min-width: 0; }       /* 메모 입력칸이 줄어들 수 있게 */
 @media (min-width: 861px) { .mobile-header, .backdrop { display: none !important; } }
 @media (max-width: 520px) {
   .grid-4, .grid-3 { grid-template-columns: 1fr; }
@@ -974,6 +979,26 @@ window.addEventListener('popstate', (e) => {
   const id = (e.state && e.state.page) || 'dashboard';
   goto(id, true);
 });
+
+// 모바일: 화면 왼쪽 가장자리에서 오른쪽으로 스와이프 → 뒤로가기 (iOS 느낌)
+let swipeX = 0, swipeY = 0, swipeEdge = false;
+window.addEventListener('touchstart', (e) => {
+  const t = e.touches[0];
+  swipeX = t.clientX; swipeY = t.clientY;
+  swipeEdge = t.clientX < 32;   // 왼쪽 가장자리에서 시작한 경우만
+}, { passive: true });
+window.addEventListener('touchend', (e) => {
+  if (!swipeEdge) return;
+  if (document.getElementById('app').style.display === 'none') return;  // 잠금 화면이면 무시
+  const t = e.changedTouches[0];
+  const dx = t.clientX - swipeX, dy = t.clientY - swipeY;
+  // 충분히 오른쪽으로, 세로 흔들림은 작게
+  if (dx > 70 && Math.abs(dy) < 55) {
+    // 대시보드(첫 화면)에서는 앱을 벗어나지 않도록 무시
+    if (currentPage !== 'dashboard') history.back();
+    else { document.getElementById('sidebar').classList.remove('open'); document.getElementById('backdrop').classList.remove('show'); }
+  }
+}, { passive: true });
 
 // 페이지별 렌더 분기
 function renderPage(id) {
