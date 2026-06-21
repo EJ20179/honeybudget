@@ -2181,20 +2181,36 @@ function renderLoan() {
         <div class="section-head" style="margin-top:18px"><h3 style="font-size:14px">💸 월별 상환 내역</h3>
           <button class="btn btn-soft btn-sm" onclick="delLoan('${l.id}')">🗑️ 대출 삭제</button>
         </div>
+        <div class="hint-box">💡 한 번 상환할 때 <b>원금</b>과 <b>이자</b>를 나눠 기록하면, <b>원금만큼만 잔액이 줄어요</b>. (이자 칸 힌트는 현재 잔액·금리로 계산한 한 달 이자예요)</div>
         <div class="form-grid">
           <div class="field"><label>상환일</label><input type="date" id="rp-date-${l.id}" value="${today()}"></div>
-          <div class="field"><label>상환액</label><input type="text" inputmode="numeric" id="rp-amount-${l.id}" placeholder="${(l.monthly||0).toLocaleString('ko-KR')}" oninput="commaFormat(this)"></div>
-          <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="rp-memo-${l.id}" placeholder="예: 6월 상환"></div>
+          <div class="field"><label>원금 상환액</label><input type="text" inputmode="numeric" id="rp-principal-${l.id}" placeholder="0" oninput="commaFormat(this);calcRepayTotal('${l.id}')"></div>
+          <div class="field"><label>이자 상환액</label><input type="text" inputmode="numeric" id="rp-interest-${l.id}" placeholder="${Math.round(num(l.balance)*num(l.rate)/100/12).toLocaleString('ko-KR')}" oninput="commaFormat(this);calcRepayTotal('${l.id}')"></div>
+          <div class="field"><label>합계(자동)</label><input type="text" id="rp-total-${l.id}" readonly placeholder="0" style="background:var(--cream-2);font-weight:700"></div>
+          <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="rp-memo-${l.id}" placeholder="예: 6월 상환 + 원금 추가상환"></div>
           <div class="field"><label>&nbsp;</label><button class="btn btn-primary btn-sm" onclick="addRepayment('${l.id}')">＋ 상환 기록</button></div>
         </div>
         ${reps.length ? `<div class="table-wrap" style="margin-top:10px"><table>
-          <thead><tr><th>날짜</th><th style="text-align:right">상환액</th><th>메모</th><th></th></tr></thead>
-          <tbody>${reps.map(r=>`<tr>
+          <thead><tr><th>날짜</th><th style="text-align:right">원금</th><th style="text-align:right">이자</th><th style="text-align:right">합계</th><th>메모</th><th></th></tr></thead>
+          <tbody>${reps.map(r=>{
+            const pr = num(r.principal), it = num(r.interest);
+            const tot = (pr||it) ? pr+it : num(r.amount);   // 옛 데이터(원금/이자 없음)는 합계만 표시
+            return `<tr>
             <td>${r.date}</td>
-            <td style="text-align:right" class="num out">${won(r.amount)}</td>
+            <td style="text-align:right" class="num out">${(pr||it)?won(pr):'-'}</td>
+            <td style="text-align:right" class="num">${(pr||it)?won(it):'-'}</td>
+            <td style="text-align:right" class="num out">${won(tot)}</td>
             <td>${esc(r.memo)||'-'}</td>
             <td><button class="icon-btn del" onclick="delRepayment('${r.id}')" title="삭제">🗑️</button></td>
-          </tr>`).join('')}</tbody></table></div>` : `<div style="font-size:12.5px;color:var(--text-soft);margin-top:8px">아직 상환 기록이 없어요. 상환 시 기록하면 잔액이 자동으로 줄어들어요.</div>`}
+          </tr>`;}).join('')}
+          <tr style="background:var(--cream-2);font-weight:700">
+            <td>합계</td>
+            <td style="text-align:right" class="num out">${won(reps.reduce((s,r)=>s+num(r.principal),0))}</td>
+            <td style="text-align:right" class="num">${won(reps.reduce((s,r)=>s+num(r.interest),0))}</td>
+            <td style="text-align:right" class="num out">${won(reps.reduce((s,r)=>s+((num(r.principal)||num(r.interest))?num(r.principal)+num(r.interest):num(r.amount)),0))}</td>
+            <td colspan="2"></td>
+          </tr>
+          </tbody></table></div>` : `<div style="font-size:12.5px;color:var(--text-soft);margin-top:8px">아직 상환 기록이 없어요. 원금을 갚으면 잔액이 자동으로 줄어들어요.</div>`}
       </div>`;
     }).join('') : `<div class="card">${emptyBox('등록된 대출이 없어요','위 폼에서 대출을 등록해 보세요. 예) 전세자금대출 · 8,000만원')}</div>`}
   `;
@@ -2243,23 +2259,33 @@ function delLoan(id) {
     save(); toast('대출을 삭제했어요'); renderLoan();
   });
 }
-// 상환 기록 → 대출 잔액 자동 차감
+// 원금+이자 합계 자동 표시
+function calcRepayTotal(loanId) {
+  const pr = num(document.getElementById('rp-principal-'+loanId).value);
+  const it = num(document.getElementById('rp-interest-'+loanId).value);
+  const el = document.getElementById('rp-total-'+loanId);
+  if (el) el.value = (pr + it).toLocaleString('ko-KR');
+}
+// 상환 기록 → 원금만큼 대출 잔액 자동 차감
 function addRepayment(loanId) {
-  const amount = num(document.getElementById('rp-amount-'+loanId).value);
-  if (amount <= 0) return toast('상환액을 입력해 주세요 🙏');
+  const principal = num(document.getElementById('rp-principal-'+loanId).value);
+  const interest = num(document.getElementById('rp-interest-'+loanId).value);
+  if (principal <= 0 && interest <= 0) return toast('원금 또는 이자 상환액을 입력해 주세요 🙏');
   const loan = db.loans.find(l=>l.id===loanId); if(!loan) return;
   db.repayments.push({
     id:uid(), loanId,
     date: document.getElementById('rp-date-'+loanId).value || today(),
-    amount, memo: document.getElementById('rp-memo-'+loanId).value.trim()
+    principal, interest, amount: principal + interest,
+    memo: document.getElementById('rp-memo-'+loanId).value.trim()
   });
-  loan.balance = Math.max(0, num(loan.balance) - amount);  // 잔액 차감
-  save(); toast('상환을 기록했어요. 잔액이 줄었어요 💪'); renderLoan();
+  loan.balance = Math.max(0, num(loan.balance) - principal);  // 원금만큼만 잔액 차감
+  save(); toast('상환을 기록했어요. 원금만큼 잔액이 줄었어요 💪'); renderLoan();
 }
 function delRepayment(id) {
   const r = db.repayments.find(x=>x.id===id); if(!r) return;
   const loan = db.loans.find(l=>l.id===r.loanId);
-  if (loan) loan.balance = num(loan.balance) + num(r.amount);  // 잔액 복구
+  // 원금이 있으면 원금만 복구, 옛 데이터(원금 없음)는 amount 전체 복구
+  if (loan) loan.balance = num(loan.balance) + (num(r.principal) || num(r.amount));
   db.repayments = db.repayments.filter(x=>x.id!==id);
   save(); toast('상환 기록을 삭제했어요'); renderLoan();
 }
@@ -2520,10 +2546,9 @@ function renderSchedule() {
 
     <!-- 다가오는 일정 -->
     <div class="card">
-      <div class="card-title">📆 다가오는 일정${schedFilter!=='전체'?` · ${schedFilter}`:''}
+      <div class="card-title">📆 다가오는 일정${schedFilter!=='전체'?` · ${schedFilter}`:''}<span style="font-size:11.5px;font-weight:600;color:var(--text-soft);margin-left:8px">재정·개인·가족 일정을 함께 보고, 공유하기로 복사할 수 있어요</span>
         <button class="btn btn-primary btn-sm" onclick="shareSchedule()" style="margin-left:auto">📤 일정 공유하기</button>
       </div>
-      <div class="hint-box">💡 부부가 함께 보는 일정이에요. <b>재정</b>(급여·카드값·대출), <b>개인</b>(약속·병원·운동), <b>가족</b>(생일·기념일·여행)을 함께 관리하세요. <b>일정 공유하기</b>를 누르면 카카오톡 등에 붙여넣을 수 있게 복사돼요.</div>
       ${upcoming.length ? `<div class="sched-list">${
         upcoming.slice(0,10).map(({ev,when})=>{
           const d = dday(when);
