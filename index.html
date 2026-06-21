@@ -847,6 +847,7 @@ function seedSampleData() {
     { id:uid(), name:'미국 S&P500 ETF', type:'ETF',    holder:'공동', invested:5000000, current:5650000, updated:d(20), memo:'장기 적립식' },
     { id:uid(), name:'삼성전자',         type:'국내주식', holder:'성현', invested:2000000, current:1820000, updated:d(20), memo:'배당주' },
     { id:uid(), name:'비트코인',         type:'코인',    holder:'은정', invested:1000000, current:1340000, updated:d(20), memo:'소액 분산' },
+    { id:uid(), name:'발행어음(6개월)',  type:'발행어음', holder:'공동', invested:5000000, current:5090000, updated:d(20), maturity:fmtDate(addMonths(now,4)), settled:false, memo:'연 3.6% · 만기 시 수입 전환' },
   ];
   db.savings = [
     { id:uid(), date:d(25), purpose:'집 장만',    amount:1000000, goal:100000000, memo:'주택청약+적금' },
@@ -1249,8 +1250,8 @@ function renderDashboard() {
   // 생활비 통장 잔액 (전체 누적)
   const acBalance = accountBalance();
   // 투자 자산 (저축의 일환) — 평가금액·평가손익
-  const invInvested = db.investments.reduce((s,v)=>s+num(v.invested),0);
-  const invCurrent = db.investments.reduce((s,v)=>s+num(v.current),0);
+  const invInvested = db.investments.filter(v=>!v.settled).reduce((s,v)=>s+num(v.invested),0);
+  const invCurrent = db.investments.filter(v=>!v.settled).reduce((s,v)=>s+num(v.current),0);
   const invProfit = invCurrent - invInvested;
 
   const catMap = sumByCategory(ym);
@@ -2243,9 +2244,11 @@ function editSaving(id) {
    - 평가손익 = 현재 평가액 - 투자 원금,  수익률 = 평가손익 / 투자 원금
    ========================================================================= */
 function renderInvest() {
+  processMaturedInvestments();   // 만기 지난 발행어음 등 → 수입 자동 전환
   const list = db.investments.slice();
-  const totalInvested = list.reduce((s,v)=>s+num(v.invested),0);
-  const totalCurrent  = list.reduce((s,v)=>s+num(v.current),0);
+  const active = list.filter(v=>!v.settled);   // 만기·수입전환된 건 자산 합계에서 제외
+  const totalInvested = active.reduce((s,v)=>s+num(v.invested),0);
+  const totalCurrent  = active.reduce((s,v)=>s+num(v.current),0);
   const totalProfit   = totalCurrent - totalInvested;
   const totalRate     = totalInvested>0 ? (totalProfit/totalInvested*100) : 0;
   const pos = totalProfit >= 0;
@@ -2269,7 +2272,8 @@ function renderInvest() {
         <div class="field"><label>계좌 명의</label><select id="iv-holder">${INVEST_HOLDERS.map(h=>`<option>${h}</option>`).join('')}</select></div>
         <div class="field"><label>투자 원금(원)</label><input type="text" inputmode="numeric" id="iv-invested" placeholder="0" oninput="commaFormat(this)"></div>
         <div class="field"><label>현재 평가금액(원)</label><input type="text" inputmode="numeric" id="iv-current" placeholder="0" oninput="commaFormat(this)"></div>
-        <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="iv-memo" placeholder="예: 장기 적립식"></div>
+        <div class="field"><label>만기일 <span style="color:var(--text-soft)">(선택·발행어음 등)</span></label><input type="date" id="iv-maturity"></div>
+        <div class="field" style="grid-column:span 2"><label>메모</label><input type="text" id="iv-memo" placeholder="예: 만기 시 자동으로 수입에 반영돼요"></div>
         <div class="field"><label>&nbsp;</label><button class="btn btn-primary" onclick="addInvestment()">＋ 등록하기</button></div>
       </div>
     </div>
@@ -2283,8 +2287,8 @@ function renderInvest() {
           const profit = num(v.current)-num(v.invested);
           const rate = num(v.invested)>0 ? (profit/num(v.invested)*100) : 0;
           const p = profit>=0;
-          return `<tr>
-            <td><b>${esc(v.name)}</b>${v.memo?`<div style="font-size:11px;color:var(--text-soft)">${esc(v.memo)}</div>`:''}</td>
+          return `<tr style="${v.settled?'opacity:.55':''}">
+            <td><b>${esc(v.name)}</b>${v.settled?' <span class="tag" style="background:var(--mint-soft);color:#5a8a6e">만기·수입전환</span>':''}${v.maturity?`<div style="font-size:11px;color:var(--text-soft)">⏳ 만기 ${v.maturity}${!v.settled?' ('+dday(parseYMD(v.maturity)).txt+')':''}</div>`:''}${v.memo?`<div style="font-size:11px;color:var(--text-soft)">${esc(v.memo)}</div>`:''}</td>
             <td>${v.type}</td>
             <td><span class="tag ${v.holder==='은정'?'eun':(v.holder==='성현'?'sung':'common')}">${v.holder}</span></td>
             <td style="text-align:right" class="num">${won(v.invested)}</td>
@@ -2324,6 +2328,8 @@ function addInvestment() {
     holder: document.getElementById('iv-holder').value,
     invested,
     current: currentRaw==='' ? invested : num(currentRaw),  // 평가액 미입력 시 원금과 동일
+    maturity: document.getElementById('iv-maturity').value || '',  // 만기일(선택)
+    settled: false,
     updated: today(),
     memo: document.getElementById('iv-memo').value.trim()
   });
@@ -2331,14 +2337,35 @@ function addInvestment() {
 }
 function editInvestment(id) {
   const v = db.investments.find(x=>x.id===id); if(!v) return;
+  if (v.settled) return toast('만기·수입전환된 항목은 수정할 수 없어요. 필요하면 삭제하세요.');
   document.getElementById('iv-name').value=v.name;
   document.getElementById('iv-type').value=v.type;
   document.getElementById('iv-holder').value=v.holder;
   setMoney('iv-invested', v.invested);
   setMoney('iv-current', v.current);
+  document.getElementById('iv-maturity').value=v.maturity||'';
   document.getElementById('iv-memo').value=v.memo||'';
   db.investments = db.investments.filter(x=>x.id!==id); save();
   window.scrollTo({top:0,behavior:'smooth'}); toast('수정 후 다시 등록해 주세요 ✏️'); renderInvest();
+}
+// 만기일이 지난 투자(발행어음 등) → 평가금액을 수입으로 자동 전환 (한 번만)
+function processMaturedInvestments() {
+  const t = today();   // 'YYYY-MM-DD'
+  const converted = [];
+  db.investments.forEach(v => {
+    if (v.maturity && !v.settled && v.maturity <= t) {
+      const person = (v.holder==='은정' || v.holder==='성현') ? v.holder : '은정';
+      db.incomes.push({
+        id:uid(), date: v.maturity, person, type: '기타',
+        amount: num(v.current) || num(v.invested),
+        memo: (v.name || '발행어음') + ' 만기 (자동 수입전환)'
+      });
+      v.settled = true;
+      converted.push(v.name || '발행어음');
+    }
+  });
+  if (converted.length) { save(); toast('만기 도래: ' + converted.join(', ') + ' → 수입으로 반영했어요 💰'); }
+  return converted.length;
 }
 // 추가 매수: 원금과 평가액을 함께 늘림
 function buyInvestment(id) {
@@ -3382,6 +3409,7 @@ document.getElementById('modalConfirm').addEventListener('click', ()=>{
    ========================================================================= */
 function bootApp() {
   applySetupFromHash();   // 설정 링크(#setup=...)로 들어왔으면 자동 연결
+  processMaturedInvestments();   // 만기 지난 발행어음 등 → 수입 자동 전환
   buildNav();
   initMonthFilter();
   // 대시보드를 히스토리 기준점으로 설정 (이후 다른 페이지에서 뒤로가기 시 대시보드로 복귀)
@@ -3584,7 +3612,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r24';
+const APP_VERSION = '2026.06.21-r25';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
