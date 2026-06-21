@@ -3089,13 +3089,20 @@ function renderSchedule() {
 
     <!-- 다가오는 일정 -->
     <div class="card">
-      <div class="card-title">📆 다가오는 일정${schedFilter!=='전체'?` · ${schedFilter}`:''}<span style="font-size:11.5px;font-weight:600;color:var(--text-soft);margin-left:8px">재정·개인·가족 일정을 함께 보고, 공유하기로 복사할 수 있어요</span>
-        <button class="btn btn-primary btn-sm" onclick="shareSchedule()" style="margin-left:auto">📤 일정 공유하기</button>
+      <div class="card-title">📆 다가오는 일정${schedFilter!=='전체'?` · ${schedFilter}`:''}
+        <button class="btn btn-primary btn-sm" onclick="shareSchedule()" style="margin-left:auto">📤 선택 공유</button>
       </div>
-      ${upcoming.length ? `<div class="sched-list">${
-        upcoming.slice(0,10).map(({ev,when})=>{
+      ${upcoming.length ? `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+        <button class="btn btn-soft btn-sm" onclick="selAllShare(true)">☑ 전체선택</button>
+        <button class="btn btn-soft btn-sm" onclick="selAllShare(false)">☐ 전체해제</button>
+        <span style="font-size:11.5px;color:var(--text-soft)">공유할 일정만 체크하세요</span>
+      </div>
+      <div class="sched-list">${
+        upcoming.slice(0,20).map(({ev,when})=>{
           const d = dday(when);
           return `<div class="sched-item">
+            <input type="checkbox" class="sched-share-chk" data-id="${ev.id}" checked style="width:18px;height:18px;accent-color:var(--coral-deep);flex-shrink:0;cursor:pointer">
             <div class="sched-ic">${SCHED_ICON[ev.category]||'📌'}</div>
             <div class="sched-body">
               <div class="sched-title">${esc(ev.title)} ${groupTag(evGroup(ev))}${(evGroup(ev)==='개인'||evGroup(ev)==='근무')&&ev.person?` <span class="tag ${personTag(ev.person)}">${ev.person}</span>`:''} ${isRepeating(ev)?`<span class="rep">${repText(ev)}</span>`:''}</div>
@@ -3276,13 +3283,20 @@ function saveSchedEdit() {
   save(); closeSchedModal(); toast('일정을 수정했어요 ✏️'); renderSchedule();
 }
 // 다가오는 일정을 공유용 텍스트로 만들어 클립보드에 복사
+// 전체선택 / 전체해제
+function selAllShare(v) {
+  document.querySelectorAll('.sched-share-chk').forEach(c => c.checked = v);
+}
 function shareSchedule() {
+  // 체크된 일정만 공유
+  const checked = new Set([...document.querySelectorAll('.sched-share-chk:checked')].map(c=>c.dataset.id));
+  if (!checked.size) return toast('공유할 일정을 체크해 주세요 🙏');
   const upcoming = db.schedules
-    .filter(passFilter)
+    .filter(ev => checked.has(ev.id))
     .map(ev => ({ ev, when: nextOccurrence(ev) }))
-    .sort((a,b)=> a.when - b.when).slice(0,12);
+    .sort((a,b)=> a.when - b.when);
   if (!upcoming.length) return toast('공유할 일정이 없어요');
-  let txt = `🏠 우리집 예산노트 · 다가오는 일정${schedFilter!=='전체'?` (${schedFilter})`:''}\n\n`;
+  let txt = `🏠 우리집 예산노트 · 일정${schedFilter!=='전체'?` (${schedFilter})`:''}\n\n`;
   upcoming.forEach(({ev,when})=>{
     const d = dday(when);
     const range = (ev.endDate && ev.endDate!==ev.date) ? `~${fmtMD(parseYMD(ev.endDate))}` : '';
@@ -4024,7 +4038,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r43';
+const APP_VERSION = '2026.06.21-r44';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
