@@ -328,6 +328,17 @@ tr:hover td { background: var(--cream); }
 .sched-dday.coral { background: var(--coral); color: #fff; }
 .sched-dday.soft { color: var(--text-soft); }
 
+/* 메뉴 편집 */
+.menu-edit { display: flex; flex-direction: column; gap: 8px; }
+.menu-edit-row { display: flex; align-items: center; gap: 10px; background: var(--cream); border-radius: 12px; padding: 8px 12px; }
+.menu-edit-row .me-ico { font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }
+.menu-edit-row input { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--white); border-radius: 9px; padding: 8px 11px; font-size: 14px; color: var(--text); font-weight: 600; }
+.menu-edit-row input:focus { outline: none; border-color: var(--coral); box-shadow: 0 0 0 3px var(--coral-soft); }
+.menu-edit-row .me-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.menu-edit-row .me-actions button { border: none; background: var(--white); border-radius: 8px; width: 32px; height: 30px; font-size: 12px; color: var(--brown); cursor: pointer; box-shadow: var(--shadow-sm); }
+.menu-edit-row .me-actions button:hover:not(:disabled) { background: var(--beige); }
+.menu-edit-row .me-actions button:disabled { opacity: .3; cursor: default; }
+
 /* 클라우드 동기화 상태 */
 .sync-status { font-size: 12.5px; font-weight: 600; padding: 8px 12px; border-radius: 10px; background: var(--cream-2); color: var(--text-soft); }
 .sync-status.ok { background: var(--mint-soft); color: #5a8a6e; }
@@ -675,7 +686,7 @@ function emptyDB() {
     schedules: [],         // 부부가 공유하는 가계 일정
     memos: [],             // 우리집 메모판 (대시보드)
     budgets: {},
-    settings: { pin: '', owners: { wife:'은정', husband:'성현' }, hasSample: false, dashWidgets: {}, dashOrder: [], currentUser: '은정' }
+    settings: { pin: '', owners: { wife:'은정', husband:'성현' }, hasSample: false, dashWidgets: {}, dashOrder: [], currentUser: '은정', menuOrder: [], menuNames: {} }
   };
 }
 
@@ -700,6 +711,8 @@ function load() {
       if (!db.settings.dashWidgets) db.settings.dashWidgets = {};   // 대시보드 위젯 설정 보강
       if (!db.settings.dashOrder) db.settings.dashOrder = [];       // 대시보드 순서 보강
       if (!db.settings.currentUser) db.settings.currentUser = '은정';// 반응 사용자 보강
+      if (!db.settings.menuOrder) db.settings.menuOrder = [];       // 메뉴 순서 보강
+      if (!db.settings.menuNames) db.settings.menuNames = {};       // 메뉴 이름 보강
       if (!db.memos) db.memos = [];                                 // 메모 보강
     } catch(e) {
       db = emptyDB();
@@ -946,12 +959,27 @@ function unlock() {
    ========================================================================= */
 let currentPage = 'dashboard';
 
+// 메뉴 헬퍼 — 사용자 지정 순서/이름 반영
+function menuById(id) { return MENUS.find(m => m.id === id); }
+function menuName(m) {
+  const nm = db.settings && db.settings.menuNames && db.settings.menuNames[m.id];
+  return (nm && nm.trim()) || m.name;
+}
+// 저장된 메뉴 순서 (없는 항목 추가, 모르는 항목 제거)
+function getMenuOrder() {
+  const all = MENUS.map(m => m.id);
+  const saved = (db.settings && db.settings.menuOrder) || [];
+  const order = saved.filter(id => all.includes(id));
+  all.forEach(id => { if (!order.includes(id)) order.push(id); });
+  return order;
+}
+
 function buildNav() {
   const nav = document.getElementById('navMenu');
   // 대시보드는 상단 브랜드(우리집 예산노트)를 눌러 이동하므로 사이드 메뉴 목록에서는 제외
-  nav.innerHTML = MENUS.filter(m => m.id!=='dashboard').map(m =>
+  nav.innerHTML = getMenuOrder().map(menuById).filter(m => m && m.id!=='dashboard').map(m =>
     `<li><button class="${m.id===currentPage?'active':''}" data-id="${m.id}" onclick="goto('${m.id}')">
-       <span class="ico">${m.icon}</span>${m.name}</button></li>`
+       <span class="ico">${m.icon}</span>${esc(menuName(m))}</button></li>`
   ).join('');
 }
 
@@ -960,7 +988,7 @@ function goto(id, isPop) {
   const changed = (id !== currentPage);
   currentPage = id;
   const menu = MENUS.find(m => m.id === id);
-  document.getElementById('pageTitle').textContent = menu.name;
+  document.getElementById('pageTitle').textContent = menuName(menu);
   document.getElementById('pageDesc').textContent = menu.desc;
 
   // 페이지 전환
@@ -2790,6 +2818,27 @@ function renderSettings() {
     </div>
 
     <div class="card">
+      <div class="card-title">🧭 메뉴 편집 (이름·순서)
+        <button class="btn btn-soft btn-sm" style="margin-left:auto" onclick="resetMenus()">↩️ 기본값</button>
+      </div>
+      <div class="hint-box">💡 메뉴 이름을 직접 바꾸거나 ▲▼로 순서를 바꿀 수 있어요. (대시보드는 왼쪽 위 로고를 눌러 이동)</div>
+      <div class="menu-edit">
+        ${(() => {
+          const navMenus = getMenuOrder().map(menuById).filter(m => m && m.id!=='dashboard');
+          return navMenus.map((m, idx) => `
+            <div class="menu-edit-row">
+              <span class="me-ico">${m.icon}</span>
+              <input type="text" value="${esc(menuName(m))}" placeholder="${m.name}" oninput="renameMenu('${m.id}', this.value)">
+              <span class="me-actions">
+                <button onclick="moveMenu('${m.id}',-1)" ${idx===0?'disabled':''} title="위로">▲</button>
+                <button onclick="moveMenu('${m.id}',1)" ${idx===navMenus.length-1?'disabled':''} title="아래로">▼</button>
+              </span>
+            </div>`).join('');
+        })()}
+      </div>
+    </div>
+
+    <div class="card">
       <div class="card-title">🔒 PIN 잠금 변경</div>
       <div class="form-grid">
         <div class="field"><label>현재 PIN</label><input type="password" id="set-pin-old" maxlength="4" inputmode="numeric" placeholder="••••"></div>
@@ -2860,6 +2909,29 @@ function saveOwners() {
   db.settings.owners.wife = document.getElementById('set-wife').value.trim() || '은정';
   db.settings.owners.husband = document.getElementById('set-husband').value.trim() || '성현';
   save(); toast('이름을 저장했어요 ✨');
+}
+// 메뉴 이름 변경 (입력 중 실시간 반영 — 사이드바만 갱신해 입력 포커스 유지)
+function renameMenu(id, val) {
+  if (!db.settings.menuNames) db.settings.menuNames = {};
+  const def = menuById(id).name;
+  if (!val.trim() || val.trim() === def) delete db.settings.menuNames[id];
+  else db.settings.menuNames[id] = val.trim();
+  save(); buildNav();
+  if (currentPage === id) document.getElementById('pageTitle').textContent = menuName(menuById(id));
+}
+// 메뉴 순서 이동 (네비 메뉴 기준 앞/뒤 교환)
+function moveMenu(id, dir) {
+  const nav = getMenuOrder().filter(x => x !== 'dashboard');
+  const i = nav.indexOf(id), j = i + dir;
+  if (i < 0 || j < 0 || j >= nav.length) return;
+  [nav[i], nav[j]] = [nav[j], nav[i]];
+  db.settings.menuOrder = ['dashboard', ...nav];   // 대시보드는 순서 보존용으로 앞에 유지
+  save(); buildNav(); renderSettings();
+}
+// 메뉴 이름·순서 기본값으로 되돌리기
+function resetMenus() {
+  db.settings.menuOrder = []; db.settings.menuNames = {};
+  save(); buildNav(); renderSettings(); toast('메뉴를 기본값으로 되돌렸어요');
 }
 function changePin() {
   const oldP = document.getElementById('set-pin-old').value;
