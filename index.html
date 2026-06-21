@@ -2236,15 +2236,33 @@ function editDeposit(id) { openEditModal('accountDeposits', id); }
 /* =========================================================================
    ⑩ 예산 설정
    ========================================================================= */
+// 지난달 그 사람의 급여(월급+상여) 합계
+function lastSalary(person) {
+  const pm = prevYM(curMonth);
+  return db.incomes.filter(i => i.person===person && (i.type==='월급'||i.type==='상여') && inMonth(i.date, pm))
+                   .reduce((s,i)=>s+num(i.amount),0);
+}
+// 개별 예산 실제 금액 (금액 모드 그대로 / % 모드면 지난달 급여 × %)
+function effIndiv(b, who) {
+  const mode = b[who+'Mode'] || 'amount';
+  const val = (b[who+'Val']!=null && b[who+'Val']!=='') ? num(b[who+'Val']) : num(b[who]);
+  if (mode === 'percent') { const person = who==='wife'?'은정':'성현'; return Math.round(lastSalary(person) * val / 100); }
+  return val;
+}
 function renderBudget() {
   const ym = curMonth;
-  const b = db.budgets[ym] || { common:'', wife:'', husband:'', saveGoal:'', saveRate:'' };
+  const b = db.budgets[ym] || { common:'', saveGoal:'', saveRate:'' };
+  const wMode = b.wifeMode || 'amount', hMode = b.husbandMode || 'amount';
+  const wVal = (b.wifeVal!=null && b.wifeVal!=='') ? b.wifeVal : (b.wife||'');
+  const hVal = (b.husbandVal!=null && b.husbandVal!=='') ? b.husbandVal : (b.husband||'');
+  const dispVal = (mode,v)=> mode==='percent' ? (v||'') : (v?Number(v).toLocaleString('ko-KR'):'');
 
   const usedCommon = sumExpense(ym, '공동지출');
   const usedWife = sumExpense(ym, '아내 개별지출');
   const usedHus = sumExpense(ym, '남편 개별지출');
   const savedAmt = sumSaving(ym);
   const income = sumIncome(ym);
+  const effWife = effIndiv(b, 'wife'), effHus = effIndiv(b, 'husband');
 
   document.getElementById('page-budget').innerHTML = `
     <div class="card">
@@ -2252,9 +2270,12 @@ function renderBudget() {
       <div class="hint-box">💡 매달 예산을 정해두면 초과/절약 여부를 자동으로 알려드려요. 월을 바꾸면 그 달의 예산을 따로 설정할 수 있어요.</div>
       <div class="form-grid">
         <div class="field"><label>공동생활비 예산</label><input type="text" inputmode="numeric" id="bd-common" value="${b.common?Number(b.common).toLocaleString('ko-KR'):''}" placeholder="0" oninput="commaFormat(this)"></div>
-        <div class="field"><label>아내 개별지출 예산</label><input type="text" inputmode="numeric" id="bd-wife" value="${b.wife?Number(b.wife).toLocaleString('ko-KR'):''}" placeholder="0" oninput="commaFormat(this)"></div>
-        <div class="field"><label>남편 개별지출 예산</label><input type="text" inputmode="numeric" id="bd-husband" value="${b.husband?Number(b.husband).toLocaleString('ko-KR'):''}" placeholder="0" oninput="commaFormat(this)"></div>
         <div class="field"><label>저축 목표액</label><input type="text" inputmode="numeric" id="bd-saveGoal" value="${b.saveGoal?Number(b.saveGoal).toLocaleString('ko-KR'):''}" placeholder="0" oninput="commaFormat(this)"></div>
+        <div class="field"><label>아내 개별 기준</label><select id="bd-wife-mode" onchange="onBudgetModeChange('wife')"><option value="amount" ${wMode==='amount'?'selected':''}>금액(원)</option><option value="percent" ${wMode==='percent'?'selected':''}>지난달 급여 %</option></select></div>
+        <div class="field"><label>아내 개별지출 예산 <span id="bd-wife-unit" style="color:var(--text-soft)">${wMode==='percent'?'(%)':'(원)'}</span></label><input type="text" inputmode="numeric" id="bd-wife" value="${dispVal(wMode,wVal)}" placeholder="${wMode==='percent'?'예: 10':'0'}" oninput="onBudgetIndivInput(this,'wife')"></div>
+        <div class="field"><label>남편 개별 기준</label><select id="bd-husband-mode" onchange="onBudgetModeChange('husband')"><option value="amount" ${hMode==='amount'?'selected':''}>금액(원)</option><option value="percent" ${hMode==='percent'?'selected':''}>지난달 급여 %</option></select></div>
+        <div class="field"><label>남편 개별지출 예산 <span id="bd-husband-unit" style="color:var(--text-soft)">${hMode==='percent'?'(%)':'(원)'}</span></label><input type="text" inputmode="numeric" id="bd-husband" value="${dispVal(hMode,hVal)}" placeholder="${hMode==='percent'?'예: 10':'0'}" oninput="onBudgetIndivInput(this,'husband')"></div>
+        <div class="field" style="grid-column:1/-1"><div id="bd-wife-hint" style="font-size:11.5px;color:var(--text-soft)"></div><div id="bd-husband-hint" style="font-size:11.5px;color:var(--text-soft);margin-top:2px"></div></div>
         <div class="field"><label>목표 저축률(%)</label><input type="number" id="bd-saveRate" value="${b.saveRate||''}" placeholder="예: 25" min="0" max="100"></div>
         <div class="field"><label>&nbsp;</label><button class="btn btn-primary" onclick="saveBudget()">💾 예산 저장</button></div>
       </div>
@@ -2263,8 +2284,8 @@ function renderBudget() {
     <div class="card">
       <div class="card-title">📊 예산 대비 사용 현황 <span class="badge">${ym}</span></div>
       ${budgetBar('공동생활비', usedCommon, b.common)}
-      ${budgetBar('아내 개별지출', usedWife, b.wife)}
-      ${budgetBar('남편 개별지출', usedHus, b.husband)}
+      ${budgetBar('아내 개별지출'+(wMode==='percent'?` (지난달 급여 ${num(wVal)}%)`:''), usedWife, effWife)}
+      ${budgetBar('남편 개별지출'+(hMode==='percent'?` (지난달 급여 ${num(hVal)}%)`:''), usedHus, effHus)}
       ${budgetBar('저축', savedAmt, b.saveGoal, true)}
       <div class="pill-summary" style="margin-top:18px;margin-bottom:0">
         <div class="pill">목표 저축률 <b>${num(b.saveRate)||0}%</b></div>
@@ -2272,6 +2293,32 @@ function renderBudget() {
           실제 저축률 <b>${income>0 ? (savedAmt/income*100).toFixed(1):'0.0'}%</b></div>
       </div>
     </div>`;
+  updateBudgetHints();
+}
+// 개별 예산 모드 변경(금액↔%)
+function onBudgetModeChange(who) {
+  const mode = document.getElementById('bd-'+who+'-mode').value;
+  document.getElementById('bd-'+who+'-unit').textContent = mode==='percent' ? '(%)' : '(원)';
+  const el = document.getElementById('bd-'+who);
+  if (mode==='amount') commaFormat(el); else el.value = (el.value||'').replace(/,/g,'');
+  el.placeholder = mode==='percent' ? '예: 10' : '0';
+  updateBudgetHints();
+}
+function onBudgetIndivInput(el, who) {
+  if (document.getElementById('bd-'+who+'-mode').value === 'amount') commaFormat(el);
+  updateBudgetHints();
+}
+// %모드일 때 "지난달 급여 × % = 금액" 안내 갱신
+function updateBudgetHints() {
+  ['wife','husband'].forEach(who => {
+    const modeEl = document.getElementById('bd-'+who+'-mode'); if(!modeEl) return;
+    const hint = document.getElementById('bd-'+who+'-hint');
+    if (modeEl.value === 'percent') {
+      const person = who==='wife'?'은정':'성현';
+      const sal = lastSalary(person), pct = num(document.getElementById('bd-'+who).value);
+      hint.textContent = `${who==='wife'?'아내':'남편'}: 지난달 ${person} 급여 ${won(sal)} × ${pct}% = ${won(Math.round(sal*pct/100))}`;
+    } else hint.textContent = '';
+  });
 }
 // 예산 막대 (절약/초과 표시). isSave=true면 많이 할수록 좋음
 function budgetBar(name, used, budget, isSave=false) {
@@ -2302,13 +2349,18 @@ function budgetBar(name, used, budget, isSave=false) {
   </div>`;
 }
 function saveBudget() {
-  db.budgets[curMonth] = {
+  const wMode = document.getElementById('bd-wife-mode').value;
+  const hMode = document.getElementById('bd-husband-mode').value;
+  const b = {
     common: num(document.getElementById('bd-common').value),
-    wife: num(document.getElementById('bd-wife').value),
-    husband: num(document.getElementById('bd-husband').value),
+    wifeMode: wMode, wifeVal: num(document.getElementById('bd-wife').value),
+    husbandMode: hMode, husbandVal: num(document.getElementById('bd-husband').value),
     saveGoal: num(document.getElementById('bd-saveGoal').value),
     saveRate: num(document.getElementById('bd-saveRate').value),
   };
+  b.wife = effIndiv(b, 'wife');       // 실제 금액도 저장(다른 화면 호환)
+  b.husband = effIndiv(b, 'husband');
+  db.budgets[curMonth] = b;
   save(); toast('예산을 저장했어요 🎯'); renderBudget();
 }
 
@@ -4047,7 +4099,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r45';
+const APP_VERSION = '2026.06.21-r46';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
