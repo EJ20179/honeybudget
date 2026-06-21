@@ -1228,11 +1228,15 @@ function sumIncome(ym) {
 }
 // 누적 잔액: ym 말까지의 모든 수입 - 모든 지출 (전월 이월 자동 포함)
 function cumulativeBalance(ym) {
-  let inc = 0, exp = 0;
+  let inc = 0, exp = 0, sv = 0;
   db.incomes.forEach(i => { if ((i.date||'').slice(0,7) <= ym) inc += num(i.amount); });
   db.expenses.forEach(e => { if ((e.date||'').slice(0,7) <= ym && counted(e)) exp += num(e.amount); });
-  return inc - exp;
+  // 저축: 입금은 현금 감소, 찾기(인출)는 현금 증가 (기존·이월 저축은 제외 = 앱 이전에 나간 돈)
+  db.savings.forEach(s => { if ((s.date||'').slice(0,7) <= ym && !s.opening) sv += savingSign(s) * num(s.amount); });
+  return inc - exp - sv;
 }
+// 저축 방향: 찾기(인출)=-1, 입금=+1
+function savingSign(s) { return s.dir === 'out' ? -1 : 1; }
 // 실제 지출(현금흐름)로 잡히는지 — 미결제 신용카드는 '결제 예정'이라 제외
 function counted(e) { return e.payment !== '신용카드' || e.paid === true; }
 // 선택월 지출 합계 (구분별 필터 가능 · 결제완료분만)
@@ -1242,8 +1246,8 @@ function sumExpense(ym, kind) {
 }
 // 선택월 저축 합계
 function sumSaving(ym) {
-  // 이월(기초) 저축은 이번 달 저축액에서 제외
-  return db.savings.filter(s => inMonth(s.date, ym) && !s.opening).reduce((a,s)=>a+num(s.amount),0);
+  // 이번 달 순저축 = 입금 - 인출 (이월 제외)
+  return db.savings.filter(s => inMonth(s.date, ym) && !s.opening).reduce((a,s)=>a+savingSign(s)*num(s.amount),0);
 }
 // 선택월 카테고리별 지출
 function sumByCategory(ym) {
@@ -2267,7 +2271,7 @@ function renderSaving() {
   const byPurpose = {};
   db.savings.forEach(s => {
     if (!byPurpose[s.purpose]) byPurpose[s.purpose] = { sum:0, goal:0 };
-    byPurpose[s.purpose].sum += num(s.amount);
+    byPurpose[s.purpose].sum += savingSign(s) * num(s.amount);   // 입금+ / 인출-
     if (num(s.goal) > 0) byPurpose[s.purpose].goal = num(s.goal);  // 가장 최근 목표 반영
   });
 
@@ -2277,6 +2281,7 @@ function renderSaving() {
       <div class="hint-box">💡 집 장만·비상금·육아 등 목적별로 저축하면 목표별 진행률이 막대그래프로 보여요.</div>
       <div class="form-grid">
         <div class="field"><label>날짜</label><input type="date" id="sv-date" value="${today()}"></div>
+        <div class="field"><label>유형</label><select id="sv-dir"><option value="in">모으기(입금)</option><option value="out">찾기(인출)</option></select></div>
         <div class="field"><label>저축 목적</label><select id="sv-purpose">${SAVE_PURPOSES.map(p=>`<option>${p}</option>`).join('')}</select></div>
         <div class="field"><label>금액(원)</label><input type="text" inputmode="numeric" id="sv-amount" placeholder="0" oninput="commaFormat(this)"></div>
         <div class="field"><label>목표 금액(원)</label><input type="text" inputmode="numeric" id="sv-goal" placeholder="0" oninput="commaFormat(this)"></div>
@@ -2310,8 +2315,8 @@ function renderSaving() {
         <tbody>${list.map(s=>`
           <tr>
             <td>${s.date}</td>
-            <td>${s.purpose}${s.opening?' <span class="tag" style="background:var(--cream-2);color:var(--text-soft)">기초·이월</span>':''}</td>
-            <td style="text-align:right" class="num in">${won(s.amount)}</td>
+            <td>${s.purpose}${s.dir==='out'?' <span class="tag" style="background:var(--warn-soft);color:var(--warn)">찾기</span>':''}${s.opening?' <span class="tag" style="background:var(--cream-2);color:var(--text-soft)">기초·이월</span>':''}</td>
+            <td style="text-align:right" class="num ${s.dir==='out'?'out':'in'}">${s.dir==='out'?'-':''}${won(s.amount)}</td>
             <td style="text-align:right">${num(s.goal)>0?won(s.goal):'-'}</td>
             <td style="font-size:12px;color:var(--text-soft)">${s.maturity?`⏳ ${s.maturity}<br><span style="font-size:11px">${dday(parseYMD(s.maturity)).txt}</span>`:'-'}</td>
             <td>${esc(s.memo)||'-'}</td>
@@ -2332,10 +2337,11 @@ function addSaving() {
     purpose: document.getElementById('sv-purpose').value,
     amount, goal: num(document.getElementById('sv-goal').value),
     maturity: document.getElementById('sv-maturity').value || '',
+    dir: document.getElementById('sv-dir').value,             // in(입금)/out(찾기)
     opening: document.getElementById('sv-opening').checked,   // 기존(이월) 저축 여부
     memo: document.getElementById('sv-memo').value.trim()
   });
-  save(); toast('저축을 저장했어요 🐷'); renderSaving();
+  save(); toast(document.getElementById('sv-dir').value==='out'?'저축을 찾았어요(현금으로 들어옴) 💸':'저축을 저장했어요 🐷'); renderSaving();
 }
 function editSaving(id) { openEditModal('savings', id); }
 
@@ -3639,6 +3645,7 @@ const EDIT_SCHEMAS = {
   ]},
   savings: { title:'🐷 저축 수정', fields:[
     {k:'date',label:'날짜',t:'date'},
+    {k:'dir',label:'유형',t:'sel2',opt:[['in','모으기(입금)'],['out','찾기(인출)']]},
     {k:'purpose',label:'저축 목적',t:'select',opt:SAVE_PURPOSES},
     {k:'amount',label:'금액(원)',t:'money'},
     {k:'goal',label:'목표 금액(원)',t:'money'},
@@ -3681,6 +3688,7 @@ function openEditModal(coll, id) {
     const val = rec[f.k];
     let input;
     if (f.t==='select') input = `<select id="em-${f.k}">${f.opt.map(o=>`<option ${o===val?'selected':''}>${o}</option>`).join('')}</select>`;
+    else if (f.t==='sel2') input = `<select id="em-${f.k}">${f.opt.map(o=>`<option value="${o[0]}" ${o[0]===(val||f.opt[0][0])?'selected':''}>${o[1]}</option>`).join('')}</select>`;
     else if (f.t==='money') input = `<input type="text" inputmode="numeric" id="em-${f.k}" value="${val?Number(val).toLocaleString('ko-KR'):''}" oninput="commaFormat(this)">`;
     else if (f.t==='number') input = `<input type="number" id="em-${f.k}" value="${(val!=null&&val!=='')?val:''}">`;
     else if (f.t==='date') input = `<input type="date" id="em-${f.k}" value="${val||''}">`;
@@ -3910,7 +3918,7 @@ function applySetupFromHash() {
 }
 
 // 앱 버전 (업데이트 확인용 — 배포마다 갱신)
-const APP_VERSION = '2026.06.21-r36';
+const APP_VERSION = '2026.06.21-r37';
 
 // 서비스 워커 등록 (홈화면 바로가기에서도 항상 최신 반영 + 오프라인 대비)
 if ('serviceWorker' in navigator) {
